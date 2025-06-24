@@ -1,34 +1,42 @@
 name: Deploy to Firebase Hosting on merge
+
 on:
   push:
     branches:
       - main
+
 jobs:
   build_and_deploy:
+    # 최대 20분 동안만 실행되도록 제한
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     env:
+      # 프로젝트에서 사용하는 시크릿들
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      # Puppeteer 같은 패키지가 Chromium을 다운받지 않도록 설정
+      # Puppeteer → Chromium 바이너리 다운로드 스킵
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
-    steps:
-      - uses: actions/checkout@v4
 
-      # 1) Node.js 버전 명시
+    steps:
+      # 1) 코드 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2) Node.js 설치 및 캐시 설정
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'        # 프로젝트에 맞게 조정하세요
+          node-version: '18'     # 로컬과 맞춰 주세요 (예: 16, 18 등)
           cache: 'npm'
 
-      # 2) 의존성 설치
+      # 3) 의존성 설치
       - name: Install dependencies
         run: npm ci
 
-      # 3) 빌드
+      # 4) 빌드
       - name: Build (verbose)
         run: npm run build --verbose
 
-      # 4) Firebase Hosting 배포
+      # 5) Firebase Hosting 배포
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
