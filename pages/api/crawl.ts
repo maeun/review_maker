@@ -1,13 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import puppeteer, { ElementHandle } from "puppeteer";
+import { extractPlaceId } from "../../utils/extractPlaceId";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   if (req.method !== "POST") return res.status(405).end();
-  const { placeId } = req.body;
+  let { placeId } = req.body;
   if (!placeId) return res.status(400).json({ error: "placeId required" });
+
+  // placeId가 URL 형태로 들어온 경우 숫자만 추출
+  if (placeId && typeof placeId === "string" && !/^\d+$/.test(placeId)) {
+    const extracted = extractPlaceId(placeId);
+    if (!extracted)
+      return res.status(400).json({ error: "유효한 placeId를 추출할 수 없습니다." });
+    placeId = extracted;
+  }
 
   let browser;
   try {
@@ -39,6 +48,8 @@ export default async function handler(
     const entryFrameElement = await page.waitForSelector("#entryIframe", {
       timeout: 10000,
     });
+    if (!entryFrameElement)
+      throw new Error("entryIframe element를 찾을 수 없습니다.");
     const entryFrame = await entryFrameElement.contentFrame();
     if (!entryFrame) throw new Error("entryIframe을 찾을 수 없습니다.");
 
