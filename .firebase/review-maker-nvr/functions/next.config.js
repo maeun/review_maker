@@ -2,6 +2,15 @@
 
 // next.config.js
 var nextConfig = {
-  // output: 'export', // SSR 및 API 라우트 지원을 위해 제거
+  // Firebase Hosting을 위한 설정
+  output: "export",
+  trailingSlash: true,
+  images: {
+    unoptimized: true
+  },
+  // API 라우트는 Firebase Functions로 이동하므로 제거
+  experimental: {
+    appDir: false
+  }
 };
 module.exports = nextConfig;

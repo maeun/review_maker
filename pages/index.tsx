@@ -111,9 +111,9 @@ export default function Home() {
     }
 
     try {
-      // 크롤링 단계
+      // 크롤링 단계 - Express API URL 사용
       setProgress(20);
-      const crawlRes = await fetch('/api/crawl', {
+      const crawlRes = await fetch('https://us-central1-review-maker-nvr.cloudfunctions.net/api/crawl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ placeId }),
@@ -131,8 +131,8 @@ export default function Home() {
       setVisitorReviewCount(visitorReviewCount);
       setBlogReviewCount(blogReviewCount);
       
-      // 리뷰 생성 단계
-      const genRes = await fetch('/api/generate', {
+      // 리뷰 생성 단계 - Express API URL 사용
+      const genRes = await fetch('https://us-central1-review-maker-nvr.cloudfunctions.net/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visitorReviews, blogReviews }),

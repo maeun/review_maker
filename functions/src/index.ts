@@ -1,30 +1,47 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * import {onCall} from "firebase-functions/v2/https";
- * import {onDocumentWritten} from "firebase-functions/v2/firestore";
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+import * as functions from 'firebase-functions';
+import express from 'express';
+import cors from 'cors';
+import { crawlReviews } from './crawl';
+import { generateReviews } from './generate';
 
-import {setGlobalOptions} from "firebase-functions";
+const app = express();
+app.use(cors({ origin: true }));
+app.use(express.json());
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+app.post('/crawl', async (req, res) => {
+  try {
+    const { placeId } = req.body;
+    if (!placeId) {
+      res.status(400).json({ error: 'placeId required' });
+      return;
+    }
+    const result = await crawlReviews(placeId);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Crawl function error:', error);
+    res.status(500).json({
+      error: '리뷰 생성 불가',
+      detail: error instanceof Error ? error.message : '크롤링에 실패했습니다.'
+    });
+  }
+});
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+app.post('/generate', async (req, res) => {
+  try {
+    const { visitorReviews, blogReviews } = req.body;
+    if (!visitorReviews || !blogReviews) {
+      res.status(400).json({ error: '리뷰 데이터 필요' });
+      return;
+    }
+    const result = await generateReviews(visitorReviews, blogReviews);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Generate function error:', error);
+    res.status(500).json({
+      error: '리뷰 생성 실패',
+      detail: error instanceof Error ? error.message : '리뷰 생성에 실패했습니다.'
+    });
+  }
+});
 
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+export const api = functions.region('us-central1').https.onRequest(app); 

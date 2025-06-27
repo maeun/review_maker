@@ -9,6 +9,8 @@
     "@emotion/styled": "^11.14.0",
     "@types/react": "^18.2.55",
     "@types/scheduler": "^0.26.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "framer-motion": "^10.18.0",
     "next": "^14.0.0",
     "openai": "4.20.0",
