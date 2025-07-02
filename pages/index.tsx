@@ -111,13 +111,11 @@ export default function Home() {
     }
 
     try {
-      // 크롤링 단계 - Express API URL 사용
+      // 크롤링 단계 - Cloud Run API URL 사용
+      const naverReviewUrl = `https://map.naver.com/p/entry/place/${placeId}?c=15.00,0,0,2,dh&placePath=/review`;
+      console.log('크롤링 요청 URL:', `https://crawl-pf7yv34lvq-uc.a.run.app/?url=${encodeURIComponent(naverReviewUrl)}`);
       setProgress(20);
-      const crawlRes = await fetch('https://us-central1-review-maker-nvr.cloudfunctions.net/api/crawl', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ placeId }),
-      });
+      const crawlRes = await fetch(`https://crawl-pf7yv34lvq-uc.a.run.app/?url=${encodeURIComponent(naverReviewUrl)}`);
       
       if (!crawlRes.ok) {
         const errorData = await crawlRes.json();

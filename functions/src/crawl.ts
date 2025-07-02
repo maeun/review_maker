@@ -39,11 +39,20 @@ export const crawl = functions.onRequest({ memory: "1GiB", timeoutSeconds: 300 }
         ...chromium.args,
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
       ],
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath,
       headless: chromium.headless,
+      timeout: 60000,  // 60초 타임아웃 설정
     });
     const page = await browser.newPage();
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
@@ -59,7 +68,7 @@ export const crawl = functions.onRequest({ memory: "1GiB", timeoutSeconds: 300 }
         req.continue();
       }
     });
-    await page.goto(targetUrl, { waitUntil: "networkidle2" });
+    await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 60000 });
 
     // 네이버 맵은 iframe 구조이므로, iframe 진입
     await page.waitForSelector("#entryIframe", { timeout: 100000 });

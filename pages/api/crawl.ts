@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import puppeteer, { ElementHandle } from "puppeteer";
+import chromium from "chrome-aws-lambda";
 import { extractPlaceId } from "../../utils/extractPlaceId";
 
 export default async function handler(
@@ -20,14 +20,23 @@ export default async function handler(
 
   let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: "new",
+    browser = await chromium.puppeteer.launch({
       args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-web-security",
-        "--disable-features=VizDisplayCompositor",
+        ...chromium.args,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions'
       ],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
+      timeout: 60000,
     });
     const page = await browser.newPage();
 
@@ -93,7 +102,7 @@ export default async function handler(
       );
       if (blogTabBtnHandles.length > 0) {
         // Puppeteer의 click은 ElementHandle<Element>에서만 동작하므로 as ElementHandle<Element>로 캐스팅
-        await (blogTabBtnHandles[0] as ElementHandle<Element>).click();
+        await (blogTabBtnHandles[0] as any).click();
       } else {
         throw new Error("블로그 리뷰 탭을 찾을 수 없습니다.");
       }
