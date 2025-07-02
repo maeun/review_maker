@@ -1,8 +1,5 @@
 import { OpenAI } from "openai";
-
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY! 
-});
+import * as functions from "firebase-functions";
 
 // 방문자 리뷰 프롬프트
 const visitorPrompt = (reviews: string[]) =>
@@ -20,6 +17,10 @@ const blogSystemPrompt =
 const blogUserPrompt = `Based on the information I gave you, I want to paraphrase it as I visited.\n\nCondition 1: Please provide a thorough analysis in your writing. It should comprise of detailed, insightful and in positive way.\nCondition 2: Including tables and lists to enhance understanding and readability is an optional.\nCondition 3: You may write consistently in Markdown to maintain uniformity and ease of comprehension.\nCondition 4: Do ensure your content is extensive, relevant, and in soliloquy with informal style for this blog post. Do not use 존댓말. But the writing style must be soliloquy.\nCondition 5: use relevant emojis\nCondition 6: Make a title with one of the key words.\nCondition 7: Use each key words at least 5 times in the content.\nCondition 8: Do not need to use English in sub-title.\nCondition 9: Do not use the word "체험" and "경험". It is really important.\nCondition 10: Don't write as if you're speaking to someone. Write in a diary-like style\nCondition 11: Each sentence should end as '~다' as self-conversation style.\nCondition 12: First of all, please suggest the 6-index from start to end.\n추가 조건: 각 목차와 본문, 제목 모두 마크다운(#, ##, **, __, *, _ 등) 사용하지 말고, 자연스러운 문장과 이모지로 소제목을 만들어줘. 소제목은 줄바꿈 없이 본문과 자연스럽게 이어지게 해줘. 실제 블로그 글처럼 복사해서 바로 붙여넣을 수 있게 해줘.`;
 
 export async function generateReviews(visitorReviews: string[], blogReviews: string[]) {
+  const openai = new OpenAI({
+    apiKey: functions.config().openai.key
+  });
+
   try {
     // 1. 블로그 리뷰 개별 요약/파악
     const cleanedBlogReviews = blogReviews.map((r: string) =>
