@@ -1,5 +1,8 @@
 import { OpenAI } from "openai";
-// import * as functions from "firebase-functions";
+import * as functions from "firebase-functions";
+import * as cors from "cors";
+
+const corsHandler = cors({ origin: true });
 
 // 방문자 리뷰 프롬프트
 const visitorPrompt = (reviews: string[]) =>
@@ -110,4 +113,20 @@ export async function generateReviews(visitorReviews: string[], blogReviews: str
     console.error("리뷰 생성 오류:", e);
     throw e;
   }
-} // Trigger redeploy for environment variable update
+}
+
+export const generate = functions.https.onRequest((req, res) => {
+  corsHandler(req, res, async () => {
+    try {
+      const { visitorReviews, blogReviews } = req.body;
+      if (!visitorReviews || !blogReviews) {
+        res.status(400).json({ error: "리뷰 데이터 필요" });
+        return;
+      }
+      const result = await generateReviews(visitorReviews, blogReviews);
+      res.status(200).json(result);
+    } catch (e) {
+      res.status(500).json({ error: "리뷰 생성 실패", detail: String(e) });
+    }
+  });
+});
