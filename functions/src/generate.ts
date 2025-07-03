@@ -1,5 +1,5 @@
 import { OpenAI } from "openai";
-import * as functions from "firebase-functions";
+// import * as functions from "firebase-functions";
 
 // 방문자 리뷰 프롬프트
 const visitorPrompt = (reviews: string[]) =>
@@ -18,7 +18,7 @@ const blogUserPrompt = `Based on the information I gave you, I want to paraphras
 
 export async function generateReviews(visitorReviews: string[], blogReviews: string[]) {
   const openai = new OpenAI({
-    apiKey: functions.config().openai.key
+    apiKey: process.env.OPENAI_API_KEY as string
   });
 
   try {
