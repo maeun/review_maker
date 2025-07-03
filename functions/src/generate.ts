@@ -110,4 +110,4 @@ export async function generateReviews(visitorReviews: string[], blogReviews: str
     console.error("리뷰 생성 오류:", e);
     throw e;
   }
-} 
+} // Trigger redeploy for environment variable update
