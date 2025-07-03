@@ -1,5 +1,25 @@
+import Cors from 'cors';
 import type { NextApiRequest, NextApiResponse } from "next";
 import { OpenAI } from "openai";
+
+// CORS 미들웨어 초기화
+const cors = Cors({
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"],
+});
+
+// 미들웨어를 Promise로 래핑
+function runMiddleware(req: NextApiRequest, res: NextApiResponse, fn: Function) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result: any) => {
+      if (result instanceof Error) {
+        return reject(result);
+      }
+      return resolve(result);
+    });
+  });
+}
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -22,10 +42,8 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // CORS 헤더 추가
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  await runMiddleware(req, res, cors);
+
   if (req.method === 'OPTIONS') {
     res.status(204).end();
     return;
