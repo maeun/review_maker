@@ -44,7 +44,7 @@ jobs:
           echo "Installed packages:"
           npm list --depth=0
 
-      # 빌드
+      # 빌드 (정적 파일 자동 생성)
       - name: Build
         run: npm run build
         timeout-minutes: 10
@@ -56,3 +56,5 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_REVIEW_MAKER_NVR }}
           channelId: live
           projectId: review-maker-nvr
+        env:
+          FIREBASE_CLI_EXPERIMENTS: webframeworks
