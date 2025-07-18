@@ -5,23 +5,30 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "export": "next export"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",
     "@chakra-ui/react": "^2.10.9",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@types/react": "^18.2.55",
+    "@types/scheduler": "^0.26.0",
+    "chrome-aws-lambda": "^10.1.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "framer-motion": "^10.18.0",
-    "next": "14.0.0",
+    "next": "^14.0.0",
     "openai": "4.20.0",
-    "puppeteer": "21.3.8",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "scheduler": "^0.23.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.53.2",
+    "@types/cors": "^2.8.19",
     "@types/node": "20.11.30",
-    "@types/react": "18.2.70",
     "@types/react-dom": "18.2.19",
     "typescript": "5.4.5"
   }
