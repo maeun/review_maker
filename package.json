@@ -14,6 +14,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@google/genai": "^1.10.0",
+    "@google/generative-ai": "^0.24.1",
     "@types/react": "^18.2.55",
     "@types/scheduler": "^0.26.0",
     "chrome-aws-lambda": "^10.1.0",
