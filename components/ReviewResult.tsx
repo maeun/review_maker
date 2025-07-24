@@ -51,14 +51,14 @@ export default function ReviewResult({
   };
 
   return (
-    <VStack spacing={4} w="100%">
+    <VStack spacing={6} w="100%">
       {visitorReview && (
         <Box w="100%" p={6} borderWidth={1} borderRadius="lg" boxShadow="md">
           <HStack spacing={2} mb={3} justify="space-between">
             <HStack spacing={2}>
               <Badge colorScheme="blue" variant="subtle">방문자 리뷰</Badge>
               <Text fontSize="sm" color="gray.500">
-                4-5문장, 이모지 포함 • {visitorReviewCount}개 리뷰 참고
+                4~5문장, 이모지 포함 • {visitorReviewCount}개 리뷰 참고
               </Text>
             </HStack>
             <IconButton
@@ -82,14 +82,14 @@ export default function ReviewResult({
           </Text>
         </Box>
       )}
-      
+
       {blogReview && (
         <Box w="100%" p={6} borderWidth={1} borderRadius="lg" boxShadow="md">
           <HStack spacing={2} mb={3} justify="space-between">
             <HStack spacing={2}>
               <Badge colorScheme="purple" variant="subtle">블로그 리뷰</Badge>
               <Text fontSize="sm" color="gray.500">
-                자세한 분석, 일반 텍스트 • {blogReviewCount}개 리뷰 참고
+                통합 분석 블로그 스타일 • {blogReviewCount}개 리뷰 참고
               </Text>
             </HStack>
             <IconButton
@@ -117,4 +117,4 @@ export default function ReviewResult({
       )}
     </VStack>
   );
-} 
+}

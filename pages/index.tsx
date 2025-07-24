@@ -21,7 +21,6 @@ import LoadingAnimation from '../components/LoadingAnimation';
 import SkeletonLoader from '../components/SkeletonLoader';
 import ReviewResult from '../components/ReviewResult';
 
-// 애니메이션 정의
 const pulse = keyframes`
   0% { opacity: 0.6; }
   50% { opacity: 1; }
@@ -111,7 +110,6 @@ export default function Home() {
     }
 
     try {
-      // 크롤링 단계 - Cloud Run API URL 사용
       const naverReviewUrl = `https://map.naver.com/p/entry/place/${placeId}?c=15.00,0,0,2,dh&placePath=/review`;
       console.log('크롤링 요청 URL:', `https://crawl-pf7yv34lvq-uc.a.run.app/?url=${encodeURIComponent(naverReviewUrl)}`);
       setProgress(20);
@@ -129,7 +127,6 @@ export default function Home() {
       setVisitorReviewCount(visitorReviewCount);
       setBlogReviewCount(blogReviewCount);
       
-      // 리뷰 생성 단계 - Express API URL 사용
       const genRes = await fetch('https://us-central1-review-maker-nvr.cloudfunctions.net/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -161,7 +158,6 @@ export default function Home() {
     } catch (e) {
       console.error('API 호출 오류:', e);
       
-      // 크롤링 API에서 반환된 에러 메시지 확인
       if (e instanceof Error && e.message.includes('크롤링')) {
         toast({ 
           title: '리뷰 생성 불가', 
@@ -182,7 +178,6 @@ export default function Home() {
       setLoadingStep('idle');
     } finally {
       setLoading(false);
-      // 3초 후 진행률 초기화
       setTimeout(() => {
         setProgress(0);
         setLoadingStep('idle');
@@ -269,12 +264,10 @@ export default function Home() {
           </VStack>
         </Box>
 
-        {/* 로딩 상태 표시 */}
         {loading && stepInfo && (
           <LoadingAnimation step={loadingStep} progress={progress} />
         )}
 
-        {/* 완료 상태 표시 */}
         {!loading && loadingStep === 'complete' && (
           <Box 
             w="100%" 
@@ -301,15 +294,13 @@ export default function Home() {
           </Box>
         )}
 
-        {/* 스켈레톤 로딩 */}
         {loading && (loadingStep === 'crawling' || loadingStep === 'generating') && (
           <SkeletonLoader />
         )}
 
-        {/* 결과 표시 */}
         {(visitorReview || blogReview) && !loading && (
           <ReviewResult 
-            visitorReview={visitorReview} 
+            visitorReview={visitorReview}
             blogReview={blogReview}
             visitorReviewCount={visitorReviewCount}
             blogReviewCount={blogReviewCount}
@@ -318,4 +309,4 @@ export default function Home() {
       </VStack>
     </Container>
   );
-} 
+}
