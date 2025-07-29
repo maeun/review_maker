@@ -10,19 +10,24 @@ import {
 } from '@chakra-ui/react';
 import { CopyIcon, CheckIcon } from '@chakra-ui/icons';
 import { useState } from 'react';
+import SkeletonLoader from './SkeletonLoader';
 
 interface ReviewResultProps {
-  visitorReview?: string;
-  blogReview?: string;
-  visitorReviewCount?: number;
-  blogReviewCount?: number;
+  visitorReview: string;
+  isVisitorLoading: boolean;
+  visitorReviewCount: number;
+  blogReview: string;
+  isBlogLoading: boolean;
+  blogReviewCount: number;
 }
 
 export default function ReviewResult({ 
-  visitorReview, 
-  blogReview, 
-  visitorReviewCount = 0, 
-  blogReviewCount = 0 
+  visitorReview,
+  isVisitorLoading,
+  visitorReviewCount,
+  blogReview,
+  isBlogLoading,
+  blogReviewCount,
 }: ReviewResultProps) {
   const [copiedType, setCopiedType] = useState<'visitor' | 'blog' | null>(null);
   const toast = useToast();
@@ -52,14 +57,18 @@ export default function ReviewResult({
 
   return (
     <VStack spacing={6} w="100%">
-      {visitorReview && (
+      {isVisitorLoading ? (
+        <SkeletonLoader />
+      ) : visitorReview && (
         <Box w="100%" p={6} borderWidth={1} borderRadius="lg" boxShadow="md">
           <HStack spacing={2} mb={3} justify="space-between">
             <HStack spacing={2}>
               <Badge colorScheme="blue" variant="subtle">방문자 리뷰</Badge>
-              <Text fontSize="sm" color="gray.500">
-                4~5문장, 이모지 포함 • {visitorReviewCount}개 리뷰 참고
-              </Text>
+              {visitorReviewCount > 0 && (
+                <Text fontSize="sm" color="gray.500">
+                  {visitorReviewCount}개 리뷰 참고
+                </Text>
+              )}
             </HStack>
             <IconButton
               aria-label="방문자 리뷰 복사"
@@ -67,9 +76,9 @@ export default function ReviewResult({
               size="sm"
               colorScheme={copiedType === 'visitor' ? 'green' : 'gray'}
               onClick={() => copyToClipboard(visitorReview, 'visitor')}
+              isDisabled={visitorReview.startsWith('오류:')}
             />
           </HStack>
-          <Heading size="md" mb={3}>방문자 리뷰</Heading>
           <Text 
             whiteSpace="pre-line" 
             lineHeight="tall"
@@ -77,20 +86,25 @@ export default function ReviewResult({
             bg="gray.50"
             borderRadius="md"
             fontSize="md"
+            color={visitorReview.startsWith('오류:') ? 'red.500' : 'inherit'}
           >
             {visitorReview}
           </Text>
         </Box>
       )}
 
-      {blogReview && (
+      {isBlogLoading ? (
+        <SkeletonLoader />
+      ) : blogReview && (
         <Box w="100%" p={6} borderWidth={1} borderRadius="lg" boxShadow="md">
           <HStack spacing={2} mb={3} justify="space-between">
             <HStack spacing={2}>
               <Badge colorScheme="purple" variant="subtle">블로그 리뷰</Badge>
-              <Text fontSize="sm" color="gray.500">
-                통합 분석 블로그 스타일 • {blogReviewCount}개 리뷰 참고
-              </Text>
+              {blogReviewCount > 0 && (
+                <Text fontSize="sm" color="gray.500">
+                  {blogReviewCount}개 리뷰 참고
+                </Text>
+              )}
             </HStack>
             <IconButton
               aria-label="블로그 리뷰 복사"
@@ -98,9 +112,9 @@ export default function ReviewResult({
               size="sm"
               colorScheme={copiedType === 'blog' ? 'green' : 'gray'}
               onClick={() => copyToClipboard(blogReview, 'blog')}
+              isDisabled={blogReview.startsWith('오류:')}
             />
           </HStack>
-          <Heading size="md" mb={3}>블로그 리뷰</Heading>
           <Box 
             whiteSpace="pre-line" 
             lineHeight="tall"
@@ -110,6 +124,7 @@ export default function ReviewResult({
             fontSize="sm"
             overflowX="auto"
             fontFamily="body"
+            color={blogReview.startsWith('오류:') ? 'red.500' : 'inherit'}
           >
             {blogReview}
           </Box>

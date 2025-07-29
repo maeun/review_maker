@@ -32,45 +32,37 @@ const slideIn = keyframes`
   to { transform: translateY(0); opacity: 1; }
 `;
 
-type LoadingStep = 'idle' | 'crawling' | 'generating' | 'complete';
-
 export default function Home() {
   const [url, setUrl] = useState('');
-  const [visitorReview, setVisitorReview] = useState('');
-  const [blogReview, setBlogReview] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState<LoadingStep>('idle');
-  const [progress, setProgress] = useState(0);
   const [isValidUrl, setIsValidUrl] = useState(true);
+  
+  const [visitorReview, setVisitorReview] = useState('');
   const [visitorReviewCount, setVisitorReviewCount] = useState(0);
+  const [isVisitorLoading, setIsVisitorLoading] = useState(false);
+
+  const [blogReview, setBlogReview] = useState('');
   const [blogReviewCount, setBlogReviewCount] = useState(0);
+  const [isBlogLoading, setIsBlogLoading] = useState(false);
+
+  const [placeId, setPlaceId] = useState<string | null>(null);
   const toast = useToast();
 
-  const extractPlaceId = (url: string) => {
-    const match = url.match(/place\/(\d+)/);
-    return match ? match[1] : null;
-  };
-
-  const validateUrl = (url: string) => {
-    if (!url.trim()) {
-      setIsValidUrl(true);
-      return;
-    }
-    const placeId = extractPlaceId(url);
-    setIsValidUrl(!!placeId);
+  const validateNaverUrl = (url: string) => {
+    if (!url.trim()) return true;
+    return url.includes('map.naver.com') || url.includes('naver.me');
   };
 
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newUrl = e.target.value;
     setUrl(newUrl);
-    validateUrl(newUrl);
+    setIsValidUrl(validateNaverUrl(newUrl));
   };
 
   const handleSubmit = async () => {
-    if (!url.trim()) {
+    if (!url.trim() || !isValidUrl) {
       toast({
-        title: 'URL을 입력해주세요',
-        description: '네이버 지도 URL을 입력해주세요.',
+        title: '유효하지 않은 URL',
+        description: '네이버 지도 또는 naver.me URL을 입력해주세요.',
         status: 'warning',
         duration: 3000,
         isClosable: true,
@@ -78,142 +70,92 @@ export default function Home() {
       return;
     }
 
-    if (!isValidUrl) {
-      toast({
-        title: '유효하지 않은 URL',
-        description: '올바른 네이버 지도 URL을 입력해주세요.',
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-      });
-      return;
-    }
-
+    // Reset states
     setVisitorReview('');
+    setVisitorReviewCount(0);
     setBlogReview('');
-    setLoading(true);
-    setLoadingStep('crawling');
-    setProgress(0);
-    
-    const placeId = extractPlaceId(url);
-    if (!placeId) {
-      toast({ 
-        title: '유효하지 않은 URL', 
-        description: '네이버 지도 URL을 올바르게 입력해주세요.',
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-      });
-      setLoading(false);
-      setLoadingStep('idle');
-      return;
-    }
+    setBlogReviewCount(0);
+    setPlaceId(null);
+    setIsVisitorLoading(true);
+    setIsBlogLoading(true);
+
+    const baseUrl = "https://us-central1-review-maker-nvr.cloudfunctions.net";
 
     try {
-      const naverReviewUrl = `https://map.naver.com/p/entry/place/${placeId}?c=15.00,0,0,2,dh&placePath=/review`;
-      console.log('크롤링 요청 URL:', `https://crawl-pf7yv34lvq-uc.a.run.app/?url=${encodeURIComponent(naverReviewUrl)}`);
-      setProgress(20);
-      const crawlRes = await fetch(`https://crawl-pf7yv34lvq-uc.a.run.app/?url=${encodeURIComponent(naverReviewUrl)}`);
-      
-      if (!crawlRes.ok) {
-        const errorData = await crawlRes.json();
-        throw new Error(errorData.detail || '크롤링에 실패했습니다.');
+      // 1. 방문자 리뷰 크롤링 (placeId 추출 및 DB 저장 담당)
+      const crawlVisitorRes = await fetch(`${baseUrl}/crawlVisitorReviews?url=${encodeURIComponent(url)}`);
+      if (!crawlVisitorRes.ok) {
+        const errData = await crawlVisitorRes.json();
+        throw new Error(`방문자 리뷰 수집 실패: ${errData.detail || '서버 오류'}`);
       }
+      const visitorCrawlData = await crawlVisitorRes.json();
+      setVisitorReviewCount(visitorCrawlData.visitorReviewCount);
+      setPlaceId(visitorCrawlData.placeId);
       
-      setProgress(50);
-      setLoadingStep('generating');
+      // 2-1. 방문자 리뷰 생성 (백그라운드에서 실행)
+      const generateVisitor = async () => {
+        try {
+          const res = await fetch(`${baseUrl}/generateVisitorReviewText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visitorReviews: visitorCrawlData.visitorReviews }),
+          });
+          if (!res.ok) throw new Error('방문자 리뷰 생성 실패');
+          const data = await res.json();
+          setVisitorReview(data.visitorReview);
+        } catch (err) {
+          console.error(err);
+          setVisitorReview('오류: 방문자 리뷰 생성 중 문제가 발생했습니다.');
+        } finally {
+          setIsVisitorLoading(false);
+        }
+      };
+
+      // 2-2. 블로그 리뷰 처리 (순차적 실행)
+      const processBlog = async () => {
+        try {
+          const crawlRes = await fetch(`${baseUrl}/crawlBlogReviews?url=${encodeURIComponent(url)}`);
+          if (!crawlRes.ok) {
+            const errData = await crawlRes.json();
+            throw new Error(`블로그 리뷰 수집 실패: ${errData.detail || '서버 오류'}`);
+          }
+          const crawlData = await crawlRes.json();
+          setBlogReviewCount(crawlData.blogReviewCount);
+
+          const genRes = await fetch(`${baseUrl}/generateBlogReviewText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blogReviews: crawlData.blogReviews }),
+          });
+          if (!genRes.ok) throw new Error('블로그 리뷰 생성 실패');
+          const genData = await genRes.json();
+          setBlogReview(genData.blogReview);
+        } catch (err: any) {
+          console.error(err);
+          setBlogReview(`오류: ${err.message || '블로그 리뷰 처리 중 문제가 발생했습니다.'}`);
+        } finally {
+          setIsBlogLoading(false);
+        }
+      };
       
-      const { visitorReviews, blogReviews, visitorReviewCount, blogReviewCount } = await crawlRes.json();
-      setVisitorReviewCount(visitorReviewCount);
-      setBlogReviewCount(blogReviewCount);
-      
-      const genRes = await fetch('https://us-central1-review-maker-nvr.cloudfunctions.net/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visitorReviews, blogReviews }),
-      });
-      
-      if (!genRes.ok) {
-        const errorData = await genRes.json();
-        throw new Error(errorData.detail || '리뷰 생성에 실패했습니다.');
-      }
-      
-      setProgress(80);
-      
-      const { visitorReview, blogReview } = await genRes.json();
-      setVisitorReview(visitorReview);
-      setBlogReview(blogReview);
-      
-      setProgress(100);
-      setLoadingStep('complete');
-      
+      // 두 프로세스를 동시에 실행
+      generateVisitor();
+      processBlog();
+
+    } catch (err: any) {
+      console.error("전체 프로세스 오류:", err);
       toast({
-        title: '리뷰 생성 완료!',
-        description: `방문자 리뷰 ${visitorReviewCount}개, 블로그 리뷰 ${blogReviewCount}개를 참고하여 생성했습니다.`,
-        status: 'success',
-        duration: 3000,
+        title: '오류 발생',
+        description: err.message || '리뷰 생성 중 문제가 발생했습니다.',
+        status: 'error',
+        duration: 5000,
         isClosable: true,
       });
-      
-    } catch (e) {
-      console.error('API 호출 오류:', e);
-      
-      if (e instanceof Error && e.message.includes('크롤링')) {
-        toast({ 
-          title: '리뷰 생성 불가', 
-          description: '네이버 지도에서 해당 장소의 리뷰를 가져올 수 없습니다. 다른 장소를 시도해주세요.',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      } else {
-        toast({ 
-          title: '리뷰 생성 실패', 
-          description: '잠시 후 다시 시도해주세요.',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      }
-      setLoadingStep('idle');
-    } finally {
-      setLoading(false);
-      setTimeout(() => {
-        setProgress(0);
-        setLoadingStep('idle');
-      }, 3000);
+      // 로딩 상태를 모두 해제하여 사용자가 다시 시도할 수 있도록 함
+      setIsVisitorLoading(false);
+      setIsBlogLoading(false);
     }
   };
-
-  const getStepInfo = (step: LoadingStep) => {
-    switch (step) {
-      case 'crawling':
-        return {
-          icon: TimeIcon,
-          title: '리뷰 데이터 수집 중...',
-          description: '네이버 지도에서 실제 리뷰들을 가져오고 있습니다.',
-          color: 'blue'
-        };
-      case 'generating':
-        return {
-          icon: InfoIcon,
-          title: 'AI 리뷰 생성 중...',
-          description: '수집된 리뷰를 바탕으로 새로운 리뷰를 생성하고 있습니다.',
-          color: 'purple'
-        };
-      case 'complete':
-        return {
-          icon: CheckCircleIcon,
-          title: '리뷰 생성 완료!',
-          description: '새로운 리뷰가 성공적으로 생성되었습니다.',
-          color: 'green'
-        };
-      default:
-        return null;
-    }
-  };
-
-  const stepInfo = getStepInfo(loadingStep);
 
   return (
     <Container maxW="lg" py={10}>
@@ -238,71 +180,39 @@ export default function Home() {
               value={url}
               onChange={handleUrlChange}
               size="lg"
-              disabled={loading}
+              disabled={isVisitorLoading || isBlogLoading}
               isInvalid={!isValidUrl && url.trim() !== ''}
               errorBorderColor="red.300"
             />
             {!isValidUrl && url.trim() !== '' && (
               <Text fontSize="sm" color="red.500" textAlign="center">
-                올바른 네이버 지도 URL을 입력해주세요
+                네이버 지도 URL(map.naver.com, naver.me)을 입력해주세요.
               </Text>
             )}
             <Text fontSize="xs" color="gray.500" textAlign="center">
               💡 네이버 지도에서 장소를 검색한 후, 주소창의 URL을 복사해서 붙여넣어주세요
             </Text>
-            <Button 
-              colorScheme="teal" 
-              onClick={handleSubmit} 
-              isLoading={loading}
-              loadingText="처리 중..."
+            <Button
+              colorScheme="teal"
+              onClick={handleSubmit}
+              isLoading={isVisitorLoading || isBlogLoading}
+              loadingText="리뷰 생성 중..."
               size="lg"
               w="100%"
-              disabled={!url.trim() || !isValidUrl || loading}
+              disabled={!url.trim() || !isValidUrl || isVisitorLoading || isBlogLoading}
             >
               리뷰 생성하기
             </Button>
           </VStack>
         </Box>
 
-        {loading && stepInfo && (
-          <LoadingAnimation step={loadingStep} progress={progress} />
-        )}
-
-        {!loading && loadingStep === 'complete' && (
-          <Box 
-            w="100%" 
-            p={4} 
-            borderWidth={1} 
-            borderRadius="lg" 
-            borderColor="green.200"
-            bg="green.50"
-            animation={`${slideIn} 0.5s ease-out`}
-          >
-            <VStack spacing={2}>
-              <HStack spacing={2} justify="center">
-                <CheckCircleIcon color="green.500" />
-                <Text color="green.700" fontWeight="medium">
-                  리뷰 생성이 완료되었습니다!
-                </Text>
-              </HStack>
-              <HStack spacing={4} fontSize="sm" color="gray.600">
-                <Text>방문자 리뷰 {visitorReviewCount}개 참고</Text>
-                <Text>•</Text>
-                <Text>블로그 리뷰 {blogReviewCount}개 참고</Text>
-              </HStack>
-            </VStack>
-          </Box>
-        )}
-
-        {loading && (loadingStep === 'crawling' || loadingStep === 'generating') && (
-          <SkeletonLoader />
-        )}
-
-        {(visitorReview || blogReview) && !loading && (
-          <ReviewResult 
+        {(isVisitorLoading || isBlogLoading || visitorReview || blogReview) && (
+          <ReviewResult
             visitorReview={visitorReview}
-            blogReview={blogReview}
+            isVisitorLoading={isVisitorLoading}
             visitorReviewCount={visitorReviewCount}
+            blogReview={blogReview}
+            isBlogLoading={isBlogLoading}
             blogReviewCount={blogReviewCount}
           />
         )}
