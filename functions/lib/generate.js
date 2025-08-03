@@ -44,7 +44,7 @@ exports.generate = functions.onRequest({
     timeoutSeconds: 540,
     maxInstances: 1,
 }, async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
     const allowedOrigins = [
         "https://review-maker-nvr.web.app",
         "http://localhost:3000",
@@ -92,15 +92,14 @@ exports.generate = functions.onRequest({
         useGeminiForBlog = true;
         try {
             const geminiKey = process.env.GEMINI_API_KEY || ((_f = functionsV1.config().gemini) === null || _f === void 0 ? void 0 : _f.key);
-            const genaiModule = await Promise.resolve().then(() => __importStar(require("@google/genai")));
-            const ai = new genaiModule.GoogleGenAI({ apiKey: geminiKey });
+            const { GoogleGenerativeAI } = await Promise.resolve().then(() => __importStar(require("@google/generative-ai")));
+            const ai = new GoogleGenerativeAI(geminiKey);
+            const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
             const prompt = visitorPrompt(visitorReviews);
             clog("[방문자 리뷰 Gemini 프롬프트]", prompt);
-            const res = await ai.models.generateContent({
-                model: "gemini-1.5-flash",
-                contents: [{ parts: [{ text: prompt }] }],
-            });
-            visitorReviewText = ((_g = res.text) === null || _g === void 0 ? void 0 : _g.trim()) || "";
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            visitorReviewText = response.text().trim() || "";
             clog("[Gemini 방문자 리뷰 생성 완료]", visitorReviewText);
         }
         catch (err) {
@@ -110,7 +109,9 @@ exports.generate = functions.onRequest({
     }
     if (!Array.isArray(blogReviews) || blogReviews.length === 0) {
         clog("[블로그 리뷰 없음]");
-        res.status(200).json({ visitorReview: visitorReviewText, blogReview: "" });
+        res
+            .status(200)
+            .json({ visitorReview: visitorReviewText, blogReview: "" });
     }
     const systemPrompt = "You are an expert Korean blog writer. Write in Markdown, soliloquy style ending each sentence with '~다'. Never use '체험' or '경험'. Use informal but rich vocabulary. Add emojis. Don't use honorifics.";
     const digestPrompt = (reviews) => `다음은 블로그 리뷰 모음이다:\n\n${reviews.join("\n\n")}\n\n이 리뷰들을 모두 분석해서, 장소에 대한 통합적 인사이트를 정리해줘.`;
@@ -137,33 +138,23 @@ ${summary}`;
     const titlePrompt = (body) => `아래 블로그 글을 읽고 키워드와 이모지를 포함한 매력적인 제목을 만들어줘. 단 한 줄만 반환해줘:\n\n${body}`;
     try {
         if (useGeminiForBlog) {
-            const geminiKey = process.env.GEMINI_API_KEY || ((_h = functionsV1.config().gemini) === null || _h === void 0 ? void 0 : _h.key);
-            const genaiModule = await Promise.resolve().then(() => __importStar(require("@google/genai")));
-            const ai = new genaiModule.GoogleGenAI({ apiKey: geminiKey });
-            const summaryRes = await ai.models.generateContent({
-                model: "gemini-1.5-flash",
-                contents: [{ parts: [{ text: digestPrompt(blogReviews) }] }],
-            });
-            const reviewSummary = ((_j = summaryRes.text) === null || _j === void 0 ? void 0 : _j.trim()) || "";
-            const indexRes = await ai.models.generateContent({
-                model: "gemini-1.5-flash",
-                contents: [{ parts: [{ text: indexPrompt(reviewSummary) }] }],
-            });
-            const blogIndexes = ((_k = indexRes.text) === null || _k === void 0 ? void 0 : _k.split(/\n|\d+\.\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 6)) || [];
+            const geminiKey = process.env.GEMINI_API_KEY || ((_g = functionsV1.config().gemini) === null || _g === void 0 ? void 0 : _g.key);
+            const { GoogleGenerativeAI } = await Promise.resolve().then(() => __importStar(require("@google/generative-ai")));
+            const ai = new GoogleGenerativeAI(geminiKey);
+            const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const generateGeminiContent = async (prompt) => {
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                return response.text().trim();
+            };
+            const reviewSummary = await generateGeminiContent(digestPrompt(blogReviews));
+            const indexContent = await generateGeminiContent(indexPrompt(reviewSummary));
+            const blogIndexes = (indexContent === null || indexContent === void 0 ? void 0 : indexContent.split(/\n|\d+\.\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 6)) || [];
             const sections = await Promise.all(blogIndexes.map(async (title) => {
-                var _a;
-                const sectionRes = await ai.models.generateContent({
-                    model: "gemini-1.5-flash",
-                    contents: [{ parts: [{ text: sectionPrompt(title, reviewSummary) }] }],
-                });
-                return ((_a = sectionRes.text) === null || _a === void 0 ? void 0 : _a.trim()) || "";
+                return await generateGeminiContent(sectionPrompt(title, reviewSummary));
             }));
             const blogBody = sections.join("\n\n");
-            const titleRes = await ai.models.generateContent({
-                model: "gemini-1.5-flash",
-                contents: [{ parts: [{ text: titlePrompt(blogBody) }] }],
-            });
-            let title = ((_l = titleRes.text) === null || _l === void 0 ? void 0 : _l.trim()) || "";
+            let title = await generateGeminiContent(titlePrompt(blogBody));
             if (title.includes("\n")) {
                 title = title.split("\n").find((l) => l.trim()) || title;
             }
@@ -180,7 +171,7 @@ ${summary}`;
                 temperature: 0.7,
                 max_tokens: 1000,
             });
-            const reviewSummary = ((_q = (_p = (_o = (_m = summaryRes.choices) === null || _m === void 0 ? void 0 : _m[0]) === null || _o === void 0 ? void 0 : _o.message) === null || _p === void 0 ? void 0 : _p.content) === null || _q === void 0 ? void 0 : _q.trim()) || "";
+            const reviewSummary = ((_l = (_k = (_j = (_h = summaryRes.choices) === null || _h === void 0 ? void 0 : _h[0]) === null || _j === void 0 ? void 0 : _j.message) === null || _k === void 0 ? void 0 : _k.content) === null || _l === void 0 ? void 0 : _l.trim()) || "";
             const indexRes = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
@@ -190,7 +181,7 @@ ${summary}`;
                 temperature: 0.7,
                 max_tokens: 500,
             });
-            const blogIndexes = ((_u = (_t = (_s = (_r = indexRes.choices) === null || _r === void 0 ? void 0 : _r[0]) === null || _s === void 0 ? void 0 : _s.message) === null || _t === void 0 ? void 0 : _t.content) === null || _u === void 0 ? void 0 : _u.split(/\n|\d+\.\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 6)) || [];
+            const blogIndexes = ((_q = (_p = (_o = (_m = indexRes.choices) === null || _m === void 0 ? void 0 : _m[0]) === null || _o === void 0 ? void 0 : _o.message) === null || _p === void 0 ? void 0 : _p.content) === null || _q === void 0 ? void 0 : _q.split(/\n|\d+\.\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 6)) || [];
             const sections = await Promise.all(blogIndexes.map(async (title) => {
                 var _a, _b, _c, _d;
                 const sectionRes = await openai.chat.completions.create({
@@ -214,7 +205,7 @@ ${summary}`;
                 temperature: 0.7,
                 max_tokens: 100,
             });
-            let title = ((_y = (_x = (_w = (_v = titleRes.choices) === null || _v === void 0 ? void 0 : _v[0]) === null || _w === void 0 ? void 0 : _w.message) === null || _x === void 0 ? void 0 : _x.content) === null || _y === void 0 ? void 0 : _y.trim()) || "";
+            let title = ((_u = (_t = (_s = (_r = titleRes.choices) === null || _r === void 0 ? void 0 : _r[0]) === null || _s === void 0 ? void 0 : _s.message) === null || _t === void 0 ? void 0 : _t.content) === null || _u === void 0 ? void 0 : _u.trim()) || "";
             if (title.includes("\n")) {
                 title = title.split("\n").find((l) => l.trim()) || title;
             }

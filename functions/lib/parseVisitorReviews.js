@@ -39,11 +39,13 @@ const cheerio = __importStar(require("cheerio"));
 function parseVisitorReviews(html) {
     const $ = cheerio.load(html);
     const reviews = [];
-    $('li.place_apply_pui.EjjAW').each((_, element) => {
-        const author = $(element).find('.pui__NMi-Dp').text().trim();
-        const reviewText = $(element).find('.pui__vn15t2 a').text().trim();
+    $("li.place_apply_pui.EjjAW").each((_, element) => {
+        const author = $(element).find(".pui__NMi-Dp").text().trim();
+        const reviewText = $(element).find(".pui__vn15t2 a").text().trim();
         const votedKeywords = [];
-        $(element).find('.pui__jhpEyP').each((_, keywordElement) => {
+        $(element)
+            .find(".pui__jhpEyP")
+            .each((_, keywordElement) => {
             votedKeywords.push($(keywordElement).text().trim());
         });
         if (author && reviewText) {
@@ -56,21 +58,21 @@ function parseVisitorReviews(html) {
     });
     return reviews;
 }
-const htmlFilePath = path.resolve(process.cwd(), 'naver_place_review.html');
-const outputFilePath = path.resolve(process.cwd(), 'functions', 'visitor_reviews.json');
-fs.readFile(htmlFilePath, 'utf8', (err, data) => {
+const htmlFilePath = path.resolve(process.cwd(), "naver_place_review.html");
+const outputFilePath = path.resolve(process.cwd(), "functions", "visitor_reviews.json");
+fs.readFile(htmlFilePath, "utf8", (err, data) => {
     if (err) {
-        console.error('Error reading the HTML file:', err);
+        console.error("Error reading the HTML file:", err);
         return;
     }
     const reviews = parseVisitorReviews(data);
     if (reviews.length === 0) {
-        console.log('No reviews found.');
+        console.log("No reviews found.");
         return;
     }
     fs.writeFile(outputFilePath, JSON.stringify(reviews, null, 2), (err) => {
         if (err) {
-            console.error('Error writing the JSON file:', err);
+            console.error("Error writing the JSON file:", err);
             return;
         }
         console.log(`Successfully extracted and saved ${reviews.length} visitor reviews to ${outputFilePath}`);

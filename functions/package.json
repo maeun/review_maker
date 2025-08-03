@@ -16,12 +16,15 @@
   "main": "lib/index.js",
   "dependencies": {
     "@google/generative-ai": "^0.14.1",
+    "@types/cheerio": "^1.0.0",
     "axios": "^1.6.7",
+    "cheerio": "^1.1.2",
     "chrome-aws-lambda": "^10.1.0",
     "cors": "^2.8.5",
     "firebase-admin": "^12.1.1",
     "firebase-functions": "^5.0.1",
     "iltorb": "^2.4.5",
+    "naver-review-gen": "file:..",
     "node-fetch": "^2.7.0",
     "openai": "^4.20.0",
     "puppeteer-core": "^10.4.0"

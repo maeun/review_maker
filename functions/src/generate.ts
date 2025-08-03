@@ -73,16 +73,15 @@ export const generate = functions.onRequest(
       try {
         const geminiKey =
           process.env.GEMINI_API_KEY || functionsV1.config().gemini?.key;
-        const genaiModule = await import("@google/genai");
-        const ai = new genaiModule.GoogleGenAI({ apiKey: geminiKey });
+        const { GoogleGenerativeAI } = await import("@google/generative-ai");
+        const ai = new GoogleGenerativeAI(geminiKey);
+        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         const prompt = visitorPrompt(visitorReviews);
         clog("[방문자 리뷰 Gemini 프롬프트]", prompt);
-        const res = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
-          contents: [{ parts: [{ text: prompt }] }],
-        });
-        visitorReviewText = res.text?.trim() || "";
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        visitorReviewText = response.text().trim() || "";
         clog("[Gemini 방문자 리뷰 생성 완료]", visitorReviewText);
       } catch (err) {
         clog("[Gemini 방문자 리뷰 실패]", String(err));
@@ -92,7 +91,9 @@ export const generate = functions.onRequest(
 
     if (!Array.isArray(blogReviews) || blogReviews.length === 0) {
       clog("[블로그 리뷰 없음]");
-      res.status(200).json({ visitorReview: visitorReviewText, blogReview: "" });
+      res
+        .status(200)
+        .json({ visitorReview: visitorReviewText, blogReview: "" });
     }
 
     const systemPrompt =
@@ -118,7 +119,10 @@ ${summary}
 
 목차만 출력해줘.`;
 
-    const sectionPrompt = (index: string, summary: string) => `다음은 블로그 목차의 한 항목이다: ${index}
+    const sectionPrompt = (
+      index: string,
+      summary: string
+    ) => `다음은 블로그 목차의 한 항목이다: ${index}
 
 이 항목에 해당하는 내용을 아래 통합 요약을 바탕으로 길고 풍부하게 작성해줘. Markdown 형식으로, 혼잣말처럼 쓰되 '~다'로 끝나고 이모지를 넣어줘. 중복 없이 MECE하게 작성해.
 
@@ -132,45 +136,43 @@ ${summary}`;
       if (useGeminiForBlog) {
         const geminiKey =
           process.env.GEMINI_API_KEY || functionsV1.config().gemini?.key;
-        const genaiModule = await import("@google/genai");
-        const ai = new genaiModule.GoogleGenAI({ apiKey: geminiKey });
+        const { GoogleGenerativeAI } = await import("@google/generative-ai");
+        const ai = new GoogleGenerativeAI(geminiKey);
+        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        const summaryRes = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
-          contents: [{ parts: [{ text: digestPrompt(blogReviews) }] }],
-        });
-        const reviewSummary = summaryRes.text?.trim() || "";
+        const generateGeminiContent = async (prompt: string) => {
+          const result = await model.generateContent(prompt);
+          const response = await result.response;
+          return response.text().trim();
+        };
 
-        const indexRes = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
-          contents: [{ parts: [{ text: indexPrompt(reviewSummary) }] }],
-        });
-        const blogIndexes = indexRes.text
-          ?.split(/\n|\d+\.\s*/)
-          .map((x) => x.trim())
-          .filter(Boolean)
-          .slice(0, 6) || [];
+        const reviewSummary = await generateGeminiContent(
+          digestPrompt(blogReviews)
+        );
+
+        const indexContent = await generateGeminiContent(
+          indexPrompt(reviewSummary)
+        );
+        const blogIndexes =
+          indexContent
+            ?.split(/\n|\d+\.\s*/)
+            .map((x: any) => x.trim())
+            .filter(Boolean)
+            .slice(0, 6) || [];
 
         const sections = await Promise.all(
-          blogIndexes.map(async (title) => {
-            const sectionRes = await ai.models.generateContent({
-              model: "gemini-1.5-flash",
-              contents: [{ parts: [{ text: sectionPrompt(title, reviewSummary) }] }],
-            });
-            return sectionRes.text?.trim() || "";
+          blogIndexes.map(async (title: any) => {
+            return await generateGeminiContent(
+              sectionPrompt(title, reviewSummary)
+            );
           })
         );
 
         const blogBody = sections.join("\n\n");
 
-        const titleRes = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
-          contents: [{ parts: [{ text: titlePrompt(blogBody) }] }],
-        });
-
-        let title = titleRes.text?.trim() || "";
+        let title = await generateGeminiContent(titlePrompt(blogBody));
         if (title.includes("\n")) {
-          title = title.split("\n").find((l) => l.trim()) || title;
+          title = title.split("\n").find((l: any) => l.trim()) || title;
         }
 
         blogReviewText = `${title}\n\n${blogBody}`;
@@ -185,7 +187,8 @@ ${summary}`;
           temperature: 0.7,
           max_tokens: 1000,
         });
-        const reviewSummary = summaryRes.choices?.[0]?.message?.content?.trim() || "";
+        const reviewSummary =
+          summaryRes.choices?.[0]?.message?.content?.trim() || "";
 
         const indexRes = await openai.chat.completions.create({
           model: "gpt-4o",
@@ -197,14 +200,15 @@ ${summary}`;
           max_tokens: 500,
         });
 
-        const blogIndexes = indexRes.choices?.[0]?.message?.content
-          ?.split(/\n|\d+\.\s*/)
-          .map((x) => x.trim())
-          .filter(Boolean)
-          .slice(0, 6) || [];
+        const blogIndexes =
+          indexRes.choices?.[0]?.message?.content
+            ?.split(/\n|\d+\.\s*/)
+            .map((x: any) => x.trim())
+            .filter(Boolean)
+            .slice(0, 6) || [];
 
         const sections = await Promise.all(
-          blogIndexes.map(async (title) => {
+          blogIndexes.map(async (title: any) => {
             const sectionRes = await openai.chat.completions.create({
               model: "gpt-4o",
               messages: [
@@ -232,7 +236,7 @@ ${summary}`;
 
         let title = titleRes.choices?.[0]?.message?.content?.trim() || "";
         if (title.includes("\n")) {
-          title = title.split("\n").find((l) => l.trim()) || title;
+          title = title.split("\n").find((l: any) => l.trim()) || title;
         }
 
         blogReviewText = `${title}\n\n${blogBody}`;

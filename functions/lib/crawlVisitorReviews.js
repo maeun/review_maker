@@ -1,87 +1,193 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.crawlVisitorReviews = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const cors = require("cors");
 const clog = (...args) => console.log("[crawlVisitorReviews]", ...args);
 const corsMiddleware = cors({
-    origin: [
-        'https://review-maker-nvr.web.app',
-        'http://localhost:3000'
-    ],
+    origin: ["https://review-maker-nvr.web.app", "http://localhost:3000"],
 });
 function extractPlaceId(url) {
-    const match = url.match(/place\/(\d+)/);
-    return match ? match[1] : null;
+    // 데스크탑 환경: /place/숫자 패턴
+    const placeMatch = url.match(/place\/(\d+)/);
+    if (placeMatch) {
+        return placeMatch[1];
+    }
+    // 모바일 환경: pinId 파라미터
+    const pinIdMatch = url.match(/[?&]pinId=(\d+)/);
+    if (pinIdMatch) {
+        return pinIdMatch[1];
+    }
+    return null;
+}
+// 모바일 환경에서 더 안정적인 URL 리다이렉트 처리
+async function resolveShortUrl(inputUrl) {
+    if (!inputUrl.includes("naver.me")) {
+        return inputUrl;
+    }
+    clog(`🔗 단축 URL 감지: ${inputUrl}`);
+    let finalUrl = inputUrl;
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+        try {
+            attempts++;
+            clog(`🔄 리다이렉트 시도 ${attempts}/${maxAttempts}: ${finalUrl}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const response = await fetch(finalUrl, {
+                method: "HEAD",
+                redirect: "manual",
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+                    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+                },
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            const location = response.headers.get("location");
+            if (location) {
+                finalUrl = location.startsWith("http")
+                    ? location
+                    : `https://map.naver.com${location}`;
+                clog(`🔀 리다이렉트 발견: ${finalUrl}`);
+                // placeId 또는 pinId가 포함된 URL인지 확인
+                if (finalUrl.includes("/place/") || finalUrl.includes("pinId=")) {
+                    return finalUrl;
+                }
+            }
+            else {
+                // HEAD 요청이 실패하면 GET으로 시도
+                clog(`🔄 HEAD 실패, GET 요청으로 재시도`);
+                const getController = new AbortController();
+                const getTimeoutId = setTimeout(() => getController.abort(), 15000);
+                const getResponse = await fetch(finalUrl, {
+                    headers: {
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+                    },
+                    signal: getController.signal,
+                });
+                clearTimeout(getTimeoutId);
+                const resolvedUrl = getResponse.url;
+                clog(`🔀 GET 요청으로 최종 URL 확인: ${resolvedUrl}`);
+                return resolvedUrl;
+            }
+        }
+        catch (error) {
+            clog(`❌ 리다이렉트 시도 ${attempts} 실패:`, error.message);
+            if (attempts === maxAttempts) {
+                // 마지막 시도로 직접 GET 요청
+                try {
+                    const fallbackController = new AbortController();
+                    const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 20000);
+                    const fallbackResponse = await fetch(inputUrl, {
+                        signal: fallbackController.signal,
+                    });
+                    clearTimeout(fallbackTimeoutId);
+                    const fallbackUrl = fallbackResponse.url;
+                    clog(`🔀 Fallback GET 요청으로 최종 URL: ${fallbackUrl}`);
+                    return fallbackUrl;
+                }
+                catch (fallbackError) {
+                    clog(`❌ Fallback도 실패:`, fallbackError.message);
+                    throw new Error(`단축 URL 해석 실패: ${fallbackError.message}`);
+                }
+            }
+        }
+    }
+    return finalUrl;
 }
 exports.crawlVisitorReviews = (0, https_1.onRequest)({
-    memory: "2GiB",
+    memory: "4GiB",
     timeoutSeconds: 180,
-    maxInstances: 5
+    maxInstances: 5,
 }, (req, res) => {
     corsMiddleware(req, res, async () => {
-        const inputUrl = req.query.url;
+        let inputUrl = req.query.url;
         if (!inputUrl) {
             res.status(400).json({ error: "url 파라미터가 필요합니다." });
             return;
         }
-        const placeId = extractPlaceId(inputUrl);
-        if (!placeId) {
-            res.status(400).json({ error: "placeId를 url에서 추출할 수 없습니다." });
-            return;
-        }
-        const targetUrl = `https://map.naver.com/p/entry/place/${placeId}?c=15.00,0,0,2,dh&placePath=/review`;
         let browser;
         try {
-            const chromiumModule = await Promise.resolve().then(() => __importStar(require("chrome-aws-lambda")));
-            const chromium = chromiumModule.default;
+            // 시스템 안정화를 위한 의도적 지연 (1-3초 랜덤)
+            const initialDelay = Math.floor(Math.random() * 2000) + 1000; // 1000-3000ms
+            clog(`⏱️ 시스템 안정화 대기: ${initialDelay}ms`);
+            await new Promise((resolve) => setTimeout(resolve, initialDelay));
+            // 단축 URL 해석
+            inputUrl = await resolveShortUrl(inputUrl);
+            const placeId = extractPlaceId(inputUrl);
+            if (!placeId) {
+                res
+                    .status(400)
+                    .json({ error: "placeId를 url에서 추출할 수 없습니다." });
+                return;
+            }
+            const targetUrl = `https://map.naver.com/p/entry/place/${placeId}?c=15.00,0,0,2,dh&placePath=/review`;
+            const chromium = require("chrome-aws-lambda");
             clog(`🧭 Crawling 시작: placeId=${placeId}`);
             clog(`🎯 대상 URL: ${targetUrl}`);
-            browser = await chromium.puppeteer.launch({
-                args: chromium.args,
-                defaultViewport: chromium.defaultViewport,
-                executablePath: await chromium.executablePath,
-                headless: chromium.headless,
-                timeout: 30000,
-            });
+            // Chrome 실행 재시도 로직 (spawn EFAULT 오류 방지)
+            let browserLaunchAttempts = 0;
+            const maxBrowserAttempts = 3;
+            while (browserLaunchAttempts < maxBrowserAttempts) {
+                try {
+                    browserLaunchAttempts++;
+                    clog(`🚀 Chrome 실행 시도 ${browserLaunchAttempts}/${maxBrowserAttempts}`);
+                    browser = await chromium.puppeteer.launch({
+                        args: [
+                            ...chromium.args,
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox",
+                            "--disable-dev-shm-usage",
+                            "--disable-gpu",
+                            "--single-process",
+                            "--no-zygote",
+                            "--disable-extensions",
+                            "--disable-plugins",
+                            "--disable-background-timer-throttling",
+                            "--disable-backgrounding-occluded-windows",
+                            "--disable-renderer-backgrounding",
+                            "--disable-features=TranslateUI",
+                            "--disable-ipc-flooding-protection",
+                            "--memory-pressure-off",
+                            "--max_old_space_size=4096",
+                        ],
+                        defaultViewport: chromium.defaultViewport,
+                        executablePath: await chromium.executablePath,
+                        headless: chromium.headless,
+                        timeout: 45000,
+                        ignoreDefaultArgs: ["--disable-extensions"],
+                    });
+                    clog(`✅ Chrome 실행 성공 (시도 ${browserLaunchAttempts})`);
+                    break;
+                }
+                catch (launchError) {
+                    clog(`❌ Chrome 실행 실패 (시도 ${browserLaunchAttempts}):`, launchError.message);
+                    if (browser) {
+                        try {
+                            await browser.close();
+                        }
+                        catch (closeError) {
+                            clog(`⚠️ 브라우저 종료 실패:`, closeError);
+                        }
+                        browser = null;
+                    }
+                    if (browserLaunchAttempts === maxBrowserAttempts) {
+                        throw new Error(`Chrome 실행 실패 (${maxBrowserAttempts}번 시도): ${launchError.message}`);
+                    }
+                    // 재시도 전 잠시 대기
+                    await new Promise((resolve) => setTimeout(resolve, 2000 * browserLaunchAttempts));
+                }
+            }
             const page = await browser.newPage();
             await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            await page.setExtraHTTPHeaders({ 'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7' });
+            await page.setExtraHTTPHeaders({
+                "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            });
             await page.setRequestInterception(true);
-            page.on('request', (req) => {
+            page.on("request", (req) => {
                 if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) {
                     req.abort();
                 }
@@ -89,7 +195,10 @@ exports.crawlVisitorReviews = (0, https_1.onRequest)({
                     req.continue();
                 }
             });
-            await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+            await page.goto(targetUrl, {
+                waitUntil: "domcontentloaded",
+                timeout: 30000,
+            });
             await page.waitForSelector("#entryIframe", { timeout: 30000 });
             const iframe = await page.$("#entryIframe");
             const frame = await iframe.contentFrame();
@@ -106,7 +215,7 @@ exports.crawlVisitorReviews = (0, https_1.onRequest)({
                         if (text && (text.includes("리뷰") || text.includes("방문자"))) {
                             await btn.click();
                             reviewTabClicked = true;
-                            clog('✅ 리뷰 탭 클릭 성공');
+                            clog("✅ 리뷰 탭 클릭 성공");
                             break;
                         }
                     }
@@ -128,7 +237,7 @@ exports.crawlVisitorReviews = (0, https_1.onRequest)({
                             ".visitor-review",
                             ".review-content",
                             ".Lia3P",
-                            ".YeINN"
+                            ".YeINN",
                         ];
                         for (const selector of selectors) {
                             const nodes = document.querySelectorAll(selector);
@@ -168,7 +277,7 @@ exports.crawlVisitorReviews = (0, https_1.onRequest)({
         finally {
             if (browser) {
                 await browser.close();
-                clog('🧹 Browser closed');
+                clog("🧹 브라우저 종료됨");
             }
         }
     });
