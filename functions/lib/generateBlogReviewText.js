@@ -101,6 +101,30 @@ IMPORTANT: Respond with one Korean title only.`;
 const corsMiddleware = cors({
     origin: ["https://review-maker-nvr.web.app", "http://localhost:3000"],
 });
+// 공통 텍스트 정리 함수
+const cleanGeneratedText = (text) => {
+    return (text
+        // 불필요한 영어 접두사 제거
+        .replace(/^.*here\s+(is|are)\s+.*:?\s*/i, "")
+        .replace(/^.*below\s+(is|are)\s+.*:?\s*/i, "")
+        .replace(/^.*following\s+(is|are)\s+.*:?\s*/i, "")
+        .replace(/^.*potential.*:?\s*/i, "")
+        .replace(/^.*blog post.*:?\s*/i, "")
+        .replace(/^.*section titles?.*:?\s*/i, "")
+        .replace(/^.*table of contents.*:?\s*/i, "")
+        // 불필요한 한국어 접두사 제거
+        .replace(/^.*다음은.*:?\s*/i, "")
+        .replace(/^.*생성된.*:?\s*/i, "")
+        .replace(/^.*제목.*:?\s*/i, "")
+        .replace(/^.*섹션.*:?\s*/i, "")
+        .replace(/^.*목차.*:?\s*/i, "")
+        // 번호 목록 제거
+        .replace(/^\d+\.\s*/gm, "")
+        .replace(/^-\s*/gm, "")
+        // 여러 줄바꿈을 두 줄바꿈으로 정리
+        .replace(/\n{3,}/g, "\n\n")
+        .trim());
+};
 // Groq fallback 함수 - 컨텍스트 연속성 강화
 const tryGroqModels = async (blogReviews) => {
     const system = { role: "system", content: systemPrompt };
@@ -224,7 +248,8 @@ const tryGroqModels = async (blogReviews) => {
             // 2단계: 목차 생성 (재시도 로직 적용)
             const indexRaw = await retryApiCall(() => callGroqWithContext(`Create table of contents based on previous summary:\n${indexPrompt(summary)}`, summary.slice(0, 500) // 요약 길이 제한
             ));
-            const blogIndexes = indexRaw
+            const cleanedIndexRaw = cleanGeneratedText(indexRaw);
+            const blogIndexes = cleanedIndexRaw
                 .split(/\n|\d+\.\s*/)
                 .map((x) => x.trim())
                 .filter(Boolean)
@@ -236,7 +261,7 @@ const tryGroqModels = async (blogReviews) => {
             const sections = [];
             for (const title of blogIndexes) {
                 const section = await retryApiCall(() => callGroqWithContext(`Write "${title}" section based on summary and TOC:\n${sectionPrompt(title, summary)}`, `요약: ${summary.slice(0, 300)}\n목차: ${blogIndexes.join(", ")}`));
-                sections.push(section);
+                sections.push(`**${title}**\n\n${section}`);
                 // 각 섹션 후 히스토리 정리
                 conversationHistory.length = 1;
             }
@@ -248,17 +273,17 @@ const tryGroqModels = async (blogReviews) => {
                 title = title.split("\n").find((l) => l.trim()) || title;
             }
             clog(`🏷️ Groq 제목 생성 완료: ${title}`);
-            // 최종 포맷팅: 목차 제거 및 자연스러운 블로그 형태로 변환
+            // 최종 포맷팅: 목차는 볼드로 유지하고 다른 마크다운만 제거
             const cleanBody = body
                 .replace(/#{1,6}\s*/g, "") // 마크다운 헤더 제거
-                .replace(/\*\*(.*?)\*\*/g, "$1") // 볼드 마크다운 제거
-                .replace(/\*(.*?)\*/g, "$1") // 이탤릭 마크다운 제거
+                // 볼드 마크다운(**text**)은 유지하고, 단일 이탤릭(*text*)만 제거
+                .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1") // 이탤릭만 제거, 볼드는 유지
                 .replace(/^\d+\.\s*/gm, "") // 번호 목록 제거
                 .replace(/^-\s*/gm, "") // 불릿 포인트 제거
                 .split("\n\n")
                 .filter((section) => section.trim().length > 0)
                 .join("\n\n");
-            return `${title}\n\n${cleanBody}`;
+            return `**${title}**\n\n${cleanBody}`;
         }
         catch (groqErr) {
             clog(`❌ Groq 모델 실패: ${model}`, groqErr.message);
@@ -273,7 +298,7 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
     secrets: ["OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY"],
 }, (req, res) => {
     corsMiddleware(req, res, async () => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
         if (req.method !== "POST") {
             res.status(405).json({ error: "POST 요청만 허용됩니다." });
             return;
@@ -340,11 +365,16 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 temperature: 0.7,
                 max_tokens: 500,
             }));
-            const blogIndexes = ((_h = (_g = (_f = (_e = indexRes.choices) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.message) === null || _g === void 0 ? void 0 : _g.content) === null || _h === void 0 ? void 0 : _h.split(/\n|\d+\.\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 6)) || [];
+            const indexContent = cleanGeneratedText(((_g = (_f = (_e = indexRes.choices) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.message) === null || _g === void 0 ? void 0 : _g.content) || "");
+            const blogIndexes = indexContent
+                .split(/\n|\d+\.\s*/)
+                .map((x) => x.trim())
+                .filter(Boolean)
+                .slice(0, 6);
             openaiHistory.push({ role: "user", content: indexPromptWithContext });
             openaiHistory.push({
                 role: "assistant",
-                content: ((_l = (_k = (_j = indexRes.choices) === null || _j === void 0 ? void 0 : _j[0]) === null || _k === void 0 ? void 0 : _k.message) === null || _l === void 0 ? void 0 : _l.content) || "",
+                content: ((_k = (_j = (_h = indexRes.choices) === null || _h === void 0 ? void 0 : _h[0]) === null || _j === void 0 ? void 0 : _j.message) === null || _k === void 0 ? void 0 : _k.content) || "",
             });
             clog(`📋 OpenAI 목차 생성 완료: ${blogIndexes.length}개`);
             // 3단계: 각 섹션 작성 (요약과 목차 모두 참조, 재시도 로직 적용)
@@ -360,7 +390,8 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                     temperature: 0.7,
                     max_tokens: 1800,
                 }));
-                return ((_d = (_c = (_b = (_a = sectionRes.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.trim()) || "";
+                const content = ((_d = (_c = (_b = (_a = sectionRes.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.trim()) || "";
+                return `**${title}**\n\n${content}`;
             }));
             const blogBody = sections.join("\n\n");
             clog(`📄 OpenAI 섹션 생성 완료: ${sections.length}개`);
@@ -375,22 +406,22 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 temperature: 0.7,
                 max_tokens: 100,
             }));
-            let title = ((_q = (_p = (_o = (_m = titleRes.choices) === null || _m === void 0 ? void 0 : _m[0]) === null || _o === void 0 ? void 0 : _o.message) === null || _p === void 0 ? void 0 : _p.content) === null || _q === void 0 ? void 0 : _q.trim()) || "";
+            let title = ((_p = (_o = (_m = (_l = titleRes.choices) === null || _l === void 0 ? void 0 : _l[0]) === null || _m === void 0 ? void 0 : _m.message) === null || _o === void 0 ? void 0 : _o.content) === null || _p === void 0 ? void 0 : _p.trim()) || "";
             if (title.includes("\n")) {
                 title = title.split("\n").find((l) => l.trim()) || title;
             }
             clog(`🏷️ OpenAI 제목 생성 완료: ${title}`);
-            // 최종 포맷팅: 마크다운 제거 및 자연스러운 블로그 형태로 변환
+            // 최종 포맷팅: 목차는 볼드로 유지하고 다른 마크다운만 제거
             const cleanBody = blogBody
                 .replace(/#{1,6}\s*/g, "") // 마크다운 헤더 제거
-                .replace(/\*\*(.*?)\*\*/g, "$1") // 볼드 마크다운 제거
-                .replace(/\*(.*?)\*/g, "$1") // 이탤릭 마크다운 제거
+                // 볼드 마크다운(**text**)은 유지하고, 단일 이탤릭(*text*)만 제거
+                .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1") // 이탤릭만 제거, 볼드는 유지
                 .replace(/^\d+\.\s*/gm, "") // 번호 목록 제거
                 .replace(/^-\s*/gm, "") // 불릿 포인트 제거
                 .split("\n\n")
                 .filter((section) => section.trim().length > 0)
                 .join("\n\n");
-            blogReviewText = `${title}\n\n${cleanBody}`;
+            blogReviewText = `**${title}**\n\n${cleanBody}`;
             clog("✅ OpenAI 최종 블로그 리뷰 생성 완료");
         }
         catch (openAiError) {
@@ -410,7 +441,8 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 const indexContent = await retryWithDelay(() => model
                     .generateContent(indexPromptWithContext)
                     .then((result) => result.response.text().trim()));
-                const blogIndexes = indexContent
+                const cleanedIndexContent = cleanGeneratedText(indexContent);
+                const blogIndexes = cleanedIndexContent
                     .split(/\n|\d+\.\s*/)
                     .map((x) => x.trim())
                     .filter(Boolean)
@@ -419,9 +451,10 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 // 3단계: 각 섹션 작성 (재시도 로직 적용)
                 const sections = await Promise.all(blogIndexes.map(async (title) => {
                     const sectionPromptWithContext = `${systemPrompt}\n\nWrite "${title}" section:\n${sectionPrompt(title, reviewSummary)}\n\nTOC: ${blogIndexes.join(", ")}`;
-                    return await retryWithDelay(() => model
+                    const content = await retryWithDelay(() => model
                         .generateContent(sectionPromptWithContext)
                         .then((result) => result.response.text().trim()));
+                    return `**${title}**\n\n${content}`;
                 }));
                 const blogBody = sections.join("\n\n");
                 clog(`📄 Gemini 섹션 생성 완료: ${sections.length}개`);
@@ -434,17 +467,17 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                     title = title.split("\n").find((l) => l.trim()) || title;
                 }
                 clog(`🏷️ Gemini 제목 생성 완료: ${title}`);
-                // 최종 포맷팅: 마크다운 제거 및 자연스러운 블로그 형태로 변환
+                // 최종 포맷팅: 목차는 볼드로 유지하고 다른 마크다운만 제거
                 const cleanBody = blogBody
                     .replace(/#{1,6}\s*/g, "") // 마크다운 헤더 제거
-                    .replace(/\*\*(.*?)\*\*/g, "$1") // 볼드 마크다운 제거
-                    .replace(/\*(.*?)\*/g, "$1") // 이탤릭 마크다운 제거
+                    // 볼드 마크다운(**text**)은 유지하고, 단일 이탤릭(*text*)만 제거
+                    .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1") // 이탤릭만 제거, 볼드는 유지
                     .replace(/^\d+\.\s*/gm, "") // 번호 목록 제거
                     .replace(/^-\s*/gm, "") // 불릿 포인트 제거
                     .split("\n\n")
                     .filter((section) => section.trim().length > 0)
                     .join("\n\n");
-                blogReviewText = `${title}\n\n${cleanBody}`;
+                blogReviewText = `**${title}**\n\n${cleanBody}`;
                 clog("✅ Gemini 최종 블로그 리뷰 생성 완료");
             }
             catch (geminiError) {
