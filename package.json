@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "cross-env NODE_ENV=development next dev",
+    "dev:prod": "cross-env NODE_ENV=production next dev",
+    "build": "cross-env NODE_ENV=production next build",
     "start": "next start",
-    "export": "next export"
+    "export": "next export",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:components": "playwright test tests/components/ --headed"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",
@@ -28,6 +32,7 @@
     "openai": "4.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-icons": "^5.5.0",
     "scheduler": "^0.23.0"
   },
   "devDependencies": {
@@ -35,6 +40,7 @@
     "@types/cors": "^2.8.19",
     "@types/node": "20.11.30",
     "@types/react-dom": "18.2.19",
+    "cross-env": "^10.0.0",
     "typescript": "5.4.5"
   }
 }

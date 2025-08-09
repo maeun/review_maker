@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Container,
   Heading,
-  Input,
   Button,
   VStack,
   Box,
@@ -10,6 +9,7 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import ReviewResult from "../components/ReviewResult";
+import SmartUrlInput from "../components/SmartUrlInput";
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -26,15 +26,12 @@ export default function Home() {
   const [placeId, setPlaceId] = useState<string | null>(null);
   const toast = useToast();
 
-  const validateNaverUrl = (url: string) => {
-    if (!url.trim()) return true;
-    return url.includes("map.naver.com") || url.includes("naver.me");
+  const handleUrlChange = (newUrl: string) => {
+    setUrl(newUrl);
   };
 
-  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newUrl = e.target.value;
-    setUrl(newUrl);
-    setIsValidUrl(validateNaverUrl(newUrl));
+  const handleValidationChange = (isValid: boolean) => {
+    setIsValidUrl(isValid);
   };
 
   const handleSubmit = async () => {
@@ -164,25 +161,15 @@ export default function Home() {
         </Text>
 
         <Box w="100%" p={6} borderWidth={1} borderRadius="lg" boxShadow="sm">
-          <VStack spacing={4}>
-            <Input
-              placeholder="네이버 지도 URL을 입력하세요 (예: https://map.naver.com/p/entry/place/1234567890)"
+          <VStack spacing={6}>
+            <SmartUrlInput
               value={url}
               onChange={handleUrlChange}
-              size="lg"
-              disabled={isVisitorLoading || isBlogLoading}
-              isInvalid={!isValidUrl && url.trim() !== ""}
-              errorBorderColor="red.300"
+              onValidationChange={handleValidationChange}
+              isLoading={isVisitorLoading || isBlogLoading}
+              placeholder="네이버 지도 URL을 입력하세요 (예: https://map.naver.com/p/entry/place/1234567890)"
             />
-            {!isValidUrl && url.trim() !== "" && (
-              <Text fontSize="sm" color="red.500" textAlign="center">
-                네이버 지도 URL(map.naver.com, naver.me)을 입력해주세요.
-              </Text>
-            )}
-            <Text fontSize="xs" color="gray.500" textAlign="center">
-              💡 네이버 지도에서 장소를 검색한 후, 주소창의 URL을 복사해서
-              붙여넣어주세요
-            </Text>
+            
             <Button
               colorScheme="teal"
               onClick={handleSubmit}
@@ -193,6 +180,12 @@ export default function Home() {
               disabled={
                 !url.trim() || !isValidUrl || isVisitorLoading || isBlogLoading
               }
+              borderRadius="xl"
+              _hover={{
+                transform: "translateY(-2px)",
+                boxShadow: "lg"
+              }}
+              transition="all 0.2s"
             >
               리뷰 생성하기
             </Button>

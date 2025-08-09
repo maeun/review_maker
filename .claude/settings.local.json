@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill:*)",
+      "Bash(npm run dev:*)",
+      "Bash(rm:*)",
+      "Bash(npx playwright:*)",
+      "Bash(npm run test:components:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}
