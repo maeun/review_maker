@@ -18,7 +18,7 @@
 - **파일**: `components/SmartUrlInput.tsx`
 - **유틸리티**: `utils/urlUtils.ts`
 - **테스트**: `tests/components/SmartUrlInput.spec.ts`
-- **데모**: `pages/demo.tsx`
+- **데모**: `pages/demo.tsx` (제거됨 - UI/UX 개선에 집중)
 
 ### 2. 주요 기능
 

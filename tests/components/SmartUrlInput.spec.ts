@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('SmartUrlInput Component', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:3000');
+    await page.goto('http://localhost:3001');
   });
 
   test('should display the enhanced URL input with all features', async ({ page }) => {

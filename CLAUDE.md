@@ -78,11 +78,11 @@ npm run test:ui
 npx playwright show-report
 ```
 
-### 5. 데모 페이지 접속
+### 5. 메인 페이지 접속
 ```
-http://localhost:3000/demo
+http://localhost:3001/
 ```
-새로운 SmartUrlInput 컴포넌트의 모든 기능을 확인할 수 있습니다.
+SmartUrlInput이 통합된 메인 서비스를 확인할 수 있습니다.
 
 ## 📦 주요 컴포넌트 및 함수
 
