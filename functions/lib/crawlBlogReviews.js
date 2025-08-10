@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.crawlBlogReviews = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const cors = require("cors");
+const logger_1 = require("./utils/logger");
 const clog = (...args) => console.log("[crawlBlogReviews]", ...args);
 const corsMiddleware = cors({
     origin: ["https://review-maker-nvr.web.app", "http://localhost:3000"],
@@ -104,8 +105,15 @@ exports.crawlBlogReviews = (0, https_1.onRequest)({
     maxInstances: 5,
 }, (req, res) => {
     corsMiddleware(req, res, async () => {
+        const startTime = Date.now();
+        // 로깅 정보 추출
+        const requestId = req.headers['x-request-id'];
+        const logger = logger_1.ReviewLogger.getInstance();
         let inputUrl = req.query.url;
         if (!inputUrl) {
+            if (requestId) {
+                await logger.logError(requestId, "url 파라미터가 필요합니다.");
+            }
             res.status(400).json({ error: "url 파라미터가 필요합니다." });
             return;
         }
@@ -463,6 +471,15 @@ exports.crawlBlogReviews = (0, https_1.onRequest)({
                 return;
             }
             clog(`✅ 블로그 리뷰 ${blogReviews.length}개 추출됨`);
+            // 성공 로깅
+            if (requestId) {
+                logger.updateBlogCrawling(requestId, {
+                    crawledUrls: blogLinks.slice(0, 10), // 최대 10개 URL만 로깅
+                    reviewCount: blogReviews.length,
+                    reviews: (0, logger_1.truncateArray)(blogReviews, 5), // 최대 5개 리뷰만 로깅
+                    processingTime: Date.now() - startTime
+                });
+            }
             res.status(200).json({
                 blogReviews,
                 blogReviewCount: blogReviews.length,
@@ -470,6 +487,13 @@ exports.crawlBlogReviews = (0, https_1.onRequest)({
         }
         catch (err) {
             clog("🔥 처리 실패:", err);
+            // 에러 로깅
+            if (requestId) {
+                logger.updateBlogCrawling(requestId, {
+                    crawlingError: err.message,
+                    processingTime: Date.now() - startTime
+                });
+            }
             res.status(500).json({
                 error: "블로그 리뷰 수집에 실패했습니다.",
                 detail: err.message,

@@ -6,7 +6,10 @@
       "Bash(rm:*)",
       "Bash(npx playwright:*)",
       "Bash(npm run test:components:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(npm run build:*)",
+      "Bash(firebase functions:delete:*)",
+      "Bash(firebase deploy:*)"
     ],
     "deny": []
   }

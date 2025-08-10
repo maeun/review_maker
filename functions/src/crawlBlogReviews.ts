@@ -1,5 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
 import cors = require("cors");
+import { ReviewLogger, truncateArray } from "./utils/logger";
 
 const clog = (...args: any[]) => console.log("[crawlBlogReviews]", ...args);
 
@@ -126,8 +127,17 @@ export const crawlBlogReviews = onRequest(
   },
   (req, res) => {
     corsMiddleware(req, res, async () => {
+      const startTime = Date.now();
+      
+      // 로깅 정보 추출
+      const requestId = req.headers['x-request-id'] as string;
+      const logger = ReviewLogger.getInstance();
+      
       let inputUrl = req.query.url as string;
       if (!inputUrl) {
+        if (requestId) {
+          await logger.logError(requestId, "url 파라미터가 필요합니다.");
+        }
         res.status(400).json({ error: "url 파라미터가 필요합니다." });
         return;
       }
@@ -602,12 +612,31 @@ export const crawlBlogReviews = onRequest(
         }
         clog(`✅ 블로그 리뷰 ${blogReviews.length}개 추출됨`);
 
+        // 성공 로깅
+        if (requestId) {
+          logger.updateBlogCrawling(requestId, {
+            crawledUrls: blogLinks.slice(0, 10), // 최대 10개 URL만 로깅
+            reviewCount: blogReviews.length,
+            reviews: truncateArray(blogReviews, 5), // 최대 5개 리뷰만 로깅
+            processingTime: Date.now() - startTime
+          });
+        }
+
         res.status(200).json({
           blogReviews,
           blogReviewCount: blogReviews.length,
         });
       } catch (err: any) {
         clog("🔥 처리 실패:", err);
+        
+        // 에러 로깅
+        if (requestId) {
+          logger.updateBlogCrawling(requestId, {
+            crawlingError: err.message,
+            processingTime: Date.now() - startTime
+          });
+        }
+        
         res.status(500).json({
           error: "블로그 리뷰 수집에 실패했습니다.",
           detail: err.message,

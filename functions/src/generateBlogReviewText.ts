@@ -1,5 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
 import cors = require("cors");
+import { ReviewLogger, truncateString, truncateArray } from "./utils/logger";
 
 const clog = (...args: any[]) =>
   console.log("[generateBlogReviewText]", ...args);
@@ -7,10 +8,16 @@ const clog = (...args: any[]) =>
 const systemPrompt =
   "You are an expert Korean blog writer specializing in positive, authentic reviews. Write in natural, friendly style for blog readers. Never use '체험' or '경험'. Use CONSISTENT formal speech (존댓말) throughout - always use '~요', '~습니다', '~예요' endings. Use sophisticated but approachable vocabulary. Add emojis sparingly for emphasis. Focus on specific positive details and personal observations. Always maintain a positive, enthusiastic tone while being authentic. Avoid negative comments or complaints.";
 
-const digestPrompt = (reviews: string[]) =>
-  `Summarize these place reviews in Korean, focusing on positive aspects:\n\n${reviews.join(
+const digestPrompt = (reviews: string[], userImpression?: string) => {
+  const basePrompt = `Summarize these place reviews in Korean, focusing on positive aspects:\n\n${reviews.join(
     "\n\n"
-  )}\n\nRules:
+  )}\n\n`;
+  
+  const userImpressionPart = userImpression 
+    ? `Also consider this user's personal impression: "${userImpression}"\n\nIntegrate the user's impression naturally if it aligns with the reviews, but prioritize the actual reviews if there are significant discrepancies.\n\n`
+    : '';
+    
+  return basePrompt + userImpressionPart + `Rules:
   1. Only use positive content mentioned in reviews
   2. No generic info or other places
   3. Focus on positive features by place type:
@@ -25,6 +32,7 @@ const digestPrompt = (reviews: string[]) =>
   5. Emphasize what makes this place special and worth visiting
   
   IMPORTANT: Respond in Korean only with positive tone.`;
+};
 
 const indexPrompt = (
   summary: string
@@ -63,10 +71,13 @@ Rules:
 11. Start directly with content, no section title repetition or summary
 12. POSITIVE TONE ONLY - no complaints, criticisms, or negative comments
 13. Each section must be completely unique - check that you're not repeating information from other sections
+14. NEVER start with greetings like '네,', '안녕하세요', '오늘은', '여러분' - jump straight into the content
+15. NEVER use conversational starters - begin with factual, descriptive content about the specific topic
+16. NO introductory phrases like '소개합니다', '말씀드릴게요', '이야기해볼게요'
 
 Summary: ${summary}
 
-IMPORTANT: Write in Korean only with positive, engaging content in plain text format. Focus solely on the unique aspect in the title.`;
+IMPORTANT: Write in Korean only with positive, engaging content in plain text format. Focus solely on the unique aspect in the title. Start with concrete, specific information immediately.`;
 
 const titlePrompt = (body: string) =>
   `Create an attractive Korean blog title based on this content. Requirements:
@@ -102,6 +113,22 @@ const cleanGeneratedText = (text: string): string => {
       .replace(/^.*제목.*:?\s*/i, "")
       .replace(/^.*섹션.*:?\s*/i, "")
       .replace(/^.*목차.*:?\s*/i, "")
+      // 대화형/인사 표현 제거
+      .replace(/^네,?\s*/gm, "")
+      .replace(/^안녕하세요[,!]?\s*/gm, "")
+      .replace(/^오늘은\s*/gm, "")
+      .replace(/^여러분[,!]?\s*/gm, "")
+      .replace(/^그럼\s*/gm, "")
+      .replace(/^자,?\s*/gm, "")
+      .replace(/^음,?\s*/gm, "")
+      .replace(/^.*소개합니다[,!]?\s*/gm, "")
+      .replace(/^.*말씀드릴게요[,!]?\s*/gm, "")
+      .replace(/^.*이야기해?볼게요[,!]?\s*/gm, "")
+      .replace(/^.*설명해?드릴게요[,!]?\s*/gm, "")
+      .replace(/^.*알려드릴게요[,!]?\s*/gm, "")
+      .replace(/^.*추천해?드릴게요[,!]?\s*/gm, "")
+      .replace(/^.*보여드릴게요[,!]?\s*/gm, "")
+      .replace(/^.*함께\s+.*해?볼게요[,!]?\s*/gm, "")
       // 번호 목록 제거
       .replace(/^\d+\.\s*/gm, "")
       .replace(/^-\s*/gm, "")
@@ -112,7 +139,7 @@ const cleanGeneratedText = (text: string): string => {
 };
 
 // Groq fallback 함수 - 컨텍스트 연속성 강화
-const tryGroqModels = async (blogReviews: string[]): Promise<string> => {
+const tryGroqModels = async (blogReviews: string[], userImpression?: string): Promise<string> => {
   const system = { role: "system", content: systemPrompt };
   const { default: fetch } = await import("node-fetch");
   const groqModels = [
@@ -225,7 +252,7 @@ const tryGroqModels = async (blogReviews: string[]): Promise<string> => {
           throw new Error("Empty response from Groq API");
         }
 
-        // 불필요한 접두사 및 마크다운 제거
+        // 불필요한 접두사 및 마크다운 제거 (cleanGeneratedText 함수와 동일하게)
         content = content
           .replace(/^.*here is.*:?\s*/i, "")
           .replace(/^.*potential.*:?\s*/i, "")
@@ -233,6 +260,22 @@ const tryGroqModels = async (blogReviews: string[]): Promise<string> => {
           .replace(/^.*다음은.*:?\s*/i, "")
           .replace(/^.*생성된.*:?\s*/i, "")
           .replace(/^.*제목.*:?\s*/i, "")
+          // 대화형/인사 표현 제거
+          .replace(/^네,?\s*/gm, "")
+          .replace(/^안녕하세요[,!]?\s*/gm, "")
+          .replace(/^오늘은\s*/gm, "")
+          .replace(/^여러분[,!]?\s*/gm, "")
+          .replace(/^그럼\s*/gm, "")
+          .replace(/^자,?\s*/gm, "")
+          .replace(/^음,?\s*/gm, "")
+          .replace(/^.*소개합니다[,!]?\s*/gm, "")
+          .replace(/^.*말씀드릴게요[,!]?\s*/gm, "")
+          .replace(/^.*이야기해?볼게요[,!]?\s*/gm, "")
+          .replace(/^.*설명해?드릴게요[,!]?\s*/gm, "")
+          .replace(/^.*알려드릴게요[,!]?\s*/gm, "")
+          .replace(/^.*추천해?드릴게요[,!]?\s*/gm, "")
+          .replace(/^.*보여드릴게요[,!]?\s*/gm, "")
+          .replace(/^.*함께\s+.*해?볼게요[,!]?\s*/gm, "")
           .replace(/#{1,6}\s*/g, "") // 마크다운 헤더 제거
           .replace(/\*\*(.*?)\*\*/g, "$1") // 볼드 마크다운 제거
           .replace(/\*(.*?)\*/g, "$1") // 이탤릭 마크다운 제거
@@ -260,7 +303,7 @@ const tryGroqModels = async (blogReviews: string[]): Promise<string> => {
 
       // 1단계: 리뷰 요약 (재시도 로직 적용)
       const summary = await retryApiCall(() =>
-        callGroqWithContext(digestPrompt(blogReviews))
+        callGroqWithContext(digestPrompt(blogReviews, userImpression))
       );
       clog(`📝 Groq 요약 생성 완료: ${summary.slice(0, 100)}...`);
 
@@ -299,7 +342,8 @@ const tryGroqModels = async (blogReviews: string[]): Promise<string> => {
             `요약: ${summary.slice(0, 300)}\n목차: ${blogIndexes.join(", ")}`
           )
         );
-        sections.push(`**${title}**\n\n${section}`);
+        const cleanedSection = cleanGeneratedText(section);
+        sections.push(`**${title}**\n\n${cleanedSection}`);
         // 각 섹션 후 히스토리 정리
         conversationHistory.length = 1;
       }
@@ -351,17 +395,29 @@ export const generateBlogReviewText = onRequest(
   },
   (req, res) => {
     corsMiddleware(req, res, async () => {
+      const startTime = Date.now();
+      
+      // 로깅 정보 추출
+      const requestId = req.headers['x-request-id'] as string;
+      const logger = ReviewLogger.getInstance();
+      
       if (req.method !== "POST") {
+        if (requestId) {
+          await logger.logError(requestId, "POST 요청만 허용됩니다.");
+        }
         res.status(405).json({ error: "POST 요청만 허용됩니다." });
         return;
       }
 
-      const { blogReviews } = req.body;
+      const { blogReviews, userImpression } = req.body;
       if (
         !blogReviews ||
         !Array.isArray(blogReviews) ||
         blogReviews.length === 0
       ) {
+        if (requestId) {
+          await logger.logError(requestId, "blogReviews 데이터가 필요합니다.");
+        }
         res.status(400).json({ error: "blogReviews 데이터가 필요합니다." });
         return;
       }
@@ -408,7 +464,7 @@ export const generateBlogReviewText = onRequest(
             model: "gpt-4o",
             messages: [
               ...openaiHistory,
-              { role: "user", content: digestPrompt(blogReviews) },
+              { role: "user", content: digestPrompt(blogReviews, userImpression) },
             ],
             temperature: 0.7,
             max_tokens: 1000,
@@ -472,7 +528,8 @@ export const generateBlogReviewText = onRequest(
             );
             const content =
               sectionRes.choices?.[0]?.message?.content?.trim() || "";
-            return `**${title}**\n\n${content}`;
+            const cleanedContent = cleanGeneratedText(content);
+            return `**${title}**\n\n${cleanedContent}`;
           })
         );
         const blogBody = sections.join("\n\n");
@@ -514,6 +571,20 @@ export const generateBlogReviewText = onRequest(
           .join("\n\n");
 
         blogReviewText = `**${title}**\n\n${cleanBody}`;
+        
+        // OpenAI 성공 로깅
+        if (requestId) {
+          const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, userImpression)}\n\nIndex: ${indexPrompt(reviewSummary)}\n\nSection: ${sectionPrompt('[섹션]', reviewSummary)}\n\nTitle: ${titlePrompt(blogBody)}`;
+          logger.updateBlogReview(requestId, {
+            reviewCount: blogReviews.length,
+            reviews: truncateArray(blogReviews, 10),
+            prompt: truncateString(combinedPrompt, 2000),
+            generatedReview: truncateString(blogReviewText, 3000),
+            aiModel: 'openai-gpt4o',
+            processingTime: Date.now() - startTime
+          });
+        }
+        
         clog("✅ OpenAI 최종 블로그 리뷰 생성 완료");
       } catch (openAiError: any) {
         clog("⚠️ OpenAI API 실패:", openAiError.message);
@@ -530,7 +601,7 @@ export const generateBlogReviewText = onRequest(
           const reviewSummary = await retryWithDelay(() =>
             model
               .generateContent(
-                `${systemPrompt}\n\n${digestPrompt(blogReviews)}`
+                `${systemPrompt}\n\n${digestPrompt(blogReviews, userImpression)}`
               )
               .then((result) => result.response.text().trim())
           );
@@ -566,7 +637,8 @@ export const generateBlogReviewText = onRequest(
                   .generateContent(sectionPromptWithContext)
                   .then((result) => result.response.text().trim())
               );
-              return `**${title}**\n\n${content}`;
+              const cleanedContent = cleanGeneratedText(content);
+              return `**${title}**\n\n${cleanedContent}`;
             })
           );
           const blogBody = sections.join("\n\n");
@@ -608,10 +680,33 @@ export const generateBlogReviewText = onRequest(
           clog("3차: Groq API 시도");
 
           try {
-            blogReviewText = await tryGroqModels(blogReviews);
+            blogReviewText = await tryGroqModels(blogReviews, userImpression);
+            
+            // Groq 성공 로깅
+            if (requestId) {
+              const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, userImpression)}\n\nGroq Fallback Chain`;
+              logger.updateBlogReview(requestId, {
+                reviewCount: blogReviews.length,
+                reviews: truncateArray(blogReviews, 10),
+                prompt: truncateString(combinedPrompt, 2000),
+                generatedReview: truncateString(blogReviewText, 3000),
+                aiModel: 'groq-fallback',
+                processingTime: Date.now() - startTime
+              });
+            }
+            
             clog("✅ Groq 최종 블로그 리뷰 생성 완료");
           } catch (groqError: any) {
             clog("🔥 최종 실패: 모든 LLM 실패");
+            
+            // 모든 LLM 실패 로깅
+            if (requestId) {
+              logger.updateBlogReview(requestId, {
+                generationError: `All LLMs failed - OpenAI: ${openAiError.message}, Gemini: ${geminiError.message}, Groq: ${groqError.message}`,
+                processingTime: Date.now() - startTime
+              });
+            }
+            
             res.status(500).json({
               error: "모든 LLM에서 리뷰 생성에 실패했습니다.",
               openai_error: openAiError.message,

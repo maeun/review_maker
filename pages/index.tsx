@@ -11,15 +11,24 @@ import {
   Icon,
   Flex,
   Badge,
-  useColorModeValue
+  useColorModeValue,
+  Textarea,
+  FormControl,
+  FormLabel
 } from "@chakra-ui/react";
 import { FaRobot, FaStar, FaMapMarkerAlt, FaLightbulb } from "react-icons/fa";
 import ReviewResult from "../components/ReviewResult";
 import SmartUrlInput from "../components/SmartUrlInput";
+import ReviewTypeSelector, { ReviewTypeOptions } from "../components/ReviewTypeSelector";
 
 export default function Home() {
   const [url, setUrl] = useState("");
   const [isValidUrl, setIsValidUrl] = useState(true);
+  const [reviewTypes, setReviewTypes] = useState<ReviewTypeOptions>({
+    visitor: true,
+    blog: true
+  });
+  const [userImpression, setUserImpression] = useState("");
 
   const [visitorReview, setVisitorReview] = useState("");
   const [visitorReviewCount, setVisitorReviewCount] = useState(0);
@@ -30,6 +39,7 @@ export default function Home() {
   const [isBlogLoading, setIsBlogLoading] = useState(false);
 
   const [placeId, setPlaceId] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const toast = useToast();
 
   const handleUrlChange = (newUrl: string) => {
@@ -52,63 +62,156 @@ export default function Home() {
       return;
     }
 
+    // 선택된 타입 확인
+    if (!reviewTypes.visitor && !reviewTypes.blog) {
+      toast({
+        title: "리뷰 타입 선택",
+        description: "작성할 리뷰 타입을 하나 이상 선택해주세요.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    // 사용자 감상 유효성 검사
+    if (!userImpression.trim()) {
+      toast({
+        title: "감상 입력 필요",
+        description: "해당 장소에 대한 간단한 감상을 작성해주세요.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
     // Reset states
     setVisitorReview("");
     setVisitorReviewCount(0);
     setBlogReview("");
     setBlogReviewCount(0);
     setPlaceId(null);
-    setIsVisitorLoading(true);
-    setIsBlogLoading(true);
+    
+    // 새로운 요청 ID 생성
+    const newRequestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    setRequestId(newRequestId);
+    
+    // 사용자 환경 감지
+    const userAgent = navigator.userAgent;
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const userEnvironment = isMobile ? 'mobile' : 'desktop';
+    
+    // 선택된 타입에 따라 로딩 상태 설정
+    setIsVisitorLoading(reviewTypes.visitor);
+    setIsBlogLoading(reviewTypes.blog);
 
     const baseUrl = "https://us-central1-review-maker-nvr.cloudfunctions.net";
+    const requestStartTime = Date.now();
 
     try {
-      // 1. 방문자 리뷰 크롤링 (placeId 추출 및 DB 저장 담당)
-      const crawlVisitorRes = await fetch(
-        `${baseUrl}/crawlVisitorReviews?url=${encodeURIComponent(url)}`
-      );
-      if (!crawlVisitorRes.ok) {
-        const errData = await crawlVisitorRes.json();
-        throw new Error(
-          `방문자 리뷰 수집 실패: ${errData.detail || "서버 오류"}`
-        );
+      // 로깅 초기화 API 호출
+      try {
+        await fetch(`${baseUrl}/initializeLogging`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            'X-Request-ID': newRequestId,
+            'X-User-Environment': userEnvironment,
+            'X-User-Agent': userAgent
+          },
+          body: JSON.stringify({
+            requestId: newRequestId,
+            requestUrl: url,
+            requestType: reviewTypes,
+            userImpression: userImpression
+          }),
+        });
+      } catch (logInitError) {
+        console.warn("로깅 초기화 실패:", logInitError);
       }
-      const visitorCrawlData = await crawlVisitorRes.json();
-      setVisitorReviewCount(visitorCrawlData.visitorReviewCount);
-      setPlaceId(visitorCrawlData.placeId);
 
-      // 2-1. 방문자 리뷰 생성 (백그라운드에서 실행)
+      let visitorCrawlData = null;
+      
+      // 방문자 리뷰가 선택된 경우에만 크롤링
+      if (reviewTypes.visitor) {
+        const crawlVisitorRes = await fetch(
+          `${baseUrl}/crawlVisitorReviews?url=${encodeURIComponent(url)}`,
+          {
+            method: 'GET',
+            headers: {
+              'X-Request-ID': newRequestId,
+              'X-User-Environment': userEnvironment,
+              'X-User-Agent': userAgent,
+              'X-Request-Type': JSON.stringify(reviewTypes)
+            }
+          }
+        );
+        if (!crawlVisitorRes.ok) {
+          const errData = await crawlVisitorRes.json();
+          throw new Error(
+            `방문자 후기 수집 실패: ${errData.detail || "서버 오류"}`
+          );
+        }
+        visitorCrawlData = await crawlVisitorRes.json();
+        setVisitorReviewCount(visitorCrawlData.visitorReviewCount);
+        setPlaceId(visitorCrawlData.placeId);
+      }
+
+      // 방문자 리뷰 생성 함수
       const generateVisitor = async () => {
+        if (!reviewTypes.visitor || !visitorCrawlData) {
+          setIsVisitorLoading(false);
+          return;
+        }
+        
         try {
           const res = await fetch(`${baseUrl}/generateVisitorReviewText`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              'X-Request-ID': newRequestId,
+              'X-User-Environment': userEnvironment
+            },
             body: JSON.stringify({
               visitorReviews: visitorCrawlData.visitorReviews,
+              userImpression: userImpression
             }),
           });
-          if (!res.ok) throw new Error("방문자 리뷰 생성 실패");
+          if (!res.ok) throw new Error("방문자 리뷰 작성 실패");
           const data = await res.json();
           setVisitorReview(data.visitorReview);
         } catch (err) {
           console.error(err);
-          setVisitorReview("오류: 방문자 리뷰 생성 중 문제가 발생했습니다.");
+          setVisitorReview("오류: 방문자 리뷰 작성 중 문제가 발생했습니다.");
         } finally {
           setIsVisitorLoading(false);
         }
       };
 
-      // 2-2. 블로그 리뷰 처리 (순차적 실행)
+      // 블로그 리뷰 처리 함수
       const processBlog = async () => {
+        if (!reviewTypes.blog) {
+          setIsBlogLoading(false);
+          return;
+        }
+        
         try {
           const crawlRes = await fetch(
-            `${baseUrl}/crawlBlogReviews?url=${encodeURIComponent(url)}`
+            `${baseUrl}/crawlBlogReviews?url=${encodeURIComponent(url)}`,
+            {
+              method: 'GET',
+              headers: {
+                'X-Request-ID': newRequestId,
+                'X-User-Environment': userEnvironment,
+                'X-Request-Type': JSON.stringify(reviewTypes)
+              }
+            }
           );
           if (!crawlRes.ok) {
             const errData = await crawlRes.json();
             throw new Error(
-              `블로그 리뷰 수집 실패: ${errData.detail || "서버 오류"}`
+              `블로그 후기 수집 실패: ${errData.detail || "서버 오류"}`
             );
           }
           const crawlData = await crawlRes.json();
@@ -116,10 +219,17 @@ export default function Home() {
 
           const genRes = await fetch(`${baseUrl}/generateBlogReviewText`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ blogReviews: crawlData.blogReviews }),
+            headers: { 
+              "Content-Type": "application/json",
+              'X-Request-ID': newRequestId,
+              'X-User-Environment': userEnvironment
+            },
+            body: JSON.stringify({ 
+              blogReviews: crawlData.blogReviews,
+              userImpression: userImpression
+            }),
           });
-          if (!genRes.ok) throw new Error("블로그 리뷰 생성 실패");
+          if (!genRes.ok) throw new Error("블로그 리뷰 작성 실패");
           const genData = await genRes.json();
           setBlogReview(genData.blogReview);
         } catch (err: any) {
@@ -132,14 +242,32 @@ export default function Home() {
         }
       };
 
-      // 두 프로세스를 동시에 실행
-      generateVisitor();
-      processBlog();
+      // 선택된 프로세스들을 병렬 실행
+      await Promise.all([
+        generateVisitor(),
+        processBlog()
+      ]);
+      
+      // 성공 시 로깅 완료
+      try {
+        await fetch(`${baseUrl}/completeRequest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId: newRequestId,
+            success: true,
+            totalProcessingTime: Date.now() - requestStartTime
+          }),
+        });
+      } catch (logError) {
+        console.warn("로깅 완료 실패:", logError);
+      }
+      
     } catch (err: any) {
       console.error("전체 프로세스 오류:", err);
       toast({
         title: "오류 발생",
-        description: err.message || "리뷰 생성 중 문제가 발생했습니다.",
+        description: err.message || "리뷰 작성 중 문제가 발생했습니다.",
         status: "error",
         duration: 5000,
         isClosable: true,
@@ -177,16 +305,6 @@ export default function Home() {
               >
                 리뷰 메이커
               </Heading>
-              <Badge 
-                colorScheme="teal" 
-                variant="subtle" 
-                px={{ base: 2, md: 3 }} 
-                py={1} 
-                borderRadius="full"
-                fontSize={{ base: "xs", md: "sm" }}
-              >
-                AI 기반
-              </Badge>
             </HStack>
             
             <Text 
@@ -196,7 +314,7 @@ export default function Home() {
               lineHeight="1.6"
               px={{ base: 2, md: 0 }}
             >
-              네이버 지도 URL을 입력하면 AI가 자동으로 방문자 리뷰와 블로그 리뷰를 생성해드립니다
+              네이버 지도 URL을 입력하면 실제 방문자 후기와 블로그 리뷰를 분석해서 새로운 리뷰를 작성해드립니다
             </Text>
 
             {/* 특징 카드들 */}
@@ -217,7 +335,7 @@ export default function Home() {
               >
                 <Icon as={FaStar} color="yellow.500" mr={2} boxSize={4} />
                 <Text fontSize={{ base: "xs", md: "sm" }} fontWeight="medium" noOfLines={1}>
-                  실제 리뷰 분석
+                  실제 후기 분석
                 </Text>
               </Flex>
               <Flex 
@@ -243,7 +361,7 @@ export default function Home() {
               >
                 <Icon as={FaLightbulb} color="orange.500" mr={2} boxSize={4} />
                 <Text fontSize={{ base: "xs", md: "sm" }} fontWeight="medium" noOfLines={1}>
-                  자동 생성
+                  자동 작성
                 </Text>
               </Flex>
             </HStack>
@@ -269,16 +387,60 @@ export default function Home() {
                 placeholder="네이버 지도 URL을 입력하세요"
               />
               
+              <ReviewTypeSelector
+                value={reviewTypes}
+                onChange={setReviewTypes}
+                isDisabled={isVisitorLoading || isBlogLoading}
+              />
+              
+              <FormControl>
+                <FormLabel 
+                  fontSize={{ base: "sm", md: "md" }}
+                  color={useColorModeValue("gray.700", "gray.300")}
+                  fontWeight="medium"
+                >
+                  이 장소에 대한 간단한 감상을 작성해주세요
+                </FormLabel>
+                <Textarea
+                  value={userImpression}
+                  onChange={(e) => setUserImpression(e.target.value)}
+                  placeholder="예: 분위기가 정말 좋았고, 음식도 맛있었어요. 친구들과 가기 좋은 곳 같네요."
+                  isDisabled={isVisitorLoading || isBlogLoading}
+                  rows={3}
+                  resize="vertical"
+                  borderRadius="lg"
+                  bg={useColorModeValue("gray.50", "gray.700")}
+                  border="1px solid"
+                  borderColor={useColorModeValue("gray.200", "gray.600")}
+                  _focus={{
+                    borderColor: "teal.500",
+                    boxShadow: "0 0 0 1px teal.500",
+                    bg: useColorModeValue("white", "gray.800")
+                  }}
+                  _hover={{
+                    borderColor: useColorModeValue("gray.300", "gray.500")
+                  }}
+                  fontSize={{ base: "sm", md: "md" }}
+                />
+                <Text 
+                  fontSize="xs" 
+                  color={useColorModeValue("gray.500", "gray.400")} 
+                  mt={1}
+                >
+                  * 작성하신 감상이 리뷰 생성에 반영됩니다
+                </Text>
+              </FormControl>
+              
               <Button
                 colorScheme="teal"
                 onClick={handleSubmit}
                 isLoading={isVisitorLoading || isBlogLoading}
-                loadingText="AI가 리뷰를 생성하고 있습니다..."
+                loadingText="리뷰를 작성하고 있습니다..."
                 size={{ base: "md", md: "lg" }}
                 w="100%"
                 h={{ base: "12", md: "14" }}
                 disabled={
-                  !url.trim() || !isValidUrl || isVisitorLoading || isBlogLoading
+                  !url.trim() || !isValidUrl || !userImpression.trim() || isVisitorLoading || isBlogLoading
                 }
                 borderRadius="xl"
                 fontSize={{ base: "md", md: "lg" }}
@@ -295,14 +457,15 @@ export default function Home() {
                 transition="all 0.2s"
               >
                 <Icon as={FaRobot} mr={{ base: 2, md: 3 }} boxSize={{ base: 4, md: 5 }} />
-                <Text display={{ base: "none", sm: "inline" }}>AI 리뷰 생성하기</Text>
-                <Text display={{ base: "inline", sm: "none" }}>생성하기</Text>
+                <Text display={{ base: "none", sm: "inline" }}>리뷰 작성하기</Text>
+                <Text display={{ base: "inline", sm: "none" }}>작성하기</Text>
               </Button>
             </VStack>
           </Box>
 
           {/* 결과 섹션 */}
-          {(isVisitorLoading || isBlogLoading || visitorReview || blogReview) && (
+          {((reviewTypes.visitor && (isVisitorLoading || visitorReview)) || 
+            (reviewTypes.blog && (isBlogLoading || blogReview))) && (
             <Box w="100%" maxW="4xl">
               <ReviewResult
                 visitorReview={visitorReview}
@@ -311,6 +474,8 @@ export default function Home() {
                 blogReview={blogReview}
                 isBlogLoading={isBlogLoading}
                 blogReviewCount={blogReviewCount}
+                showVisitor={reviewTypes.visitor}
+                showBlog={reviewTypes.blog}
               />
             </Box>
           )}

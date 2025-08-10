@@ -1,5 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
 import cors = require("cors");
+import { ReviewLogger, truncateArray } from "./utils/logger";
 
 const clog = (...args: any[]) => console.log("[crawlVisitorReviews]", ...args);
 
@@ -126,10 +127,34 @@ export const crawlVisitorReviews = onRequest(
   },
   (req, res) => {
     corsMiddleware(req, res, async () => {
+      const startTime = Date.now();
       let inputUrl = req.query.url as string;
+      
+      // 로깅 정보 추출
+      const requestId = req.headers['x-request-id'] as string;
+      const userEnvironment = req.headers['x-user-environment'] as string;
+      const userAgent = req.headers['x-user-agent'] as string;
+      const requestType = req.headers['x-request-type'] as string;
+      
+      const logger = ReviewLogger.getInstance();
+      
       if (!inputUrl) {
+        if (requestId) {
+          await logger.logError(requestId, "url 파라미터가 필요합니다.");
+        }
         res.status(400).json({ error: "url 파라미터가 필요합니다." });
         return;
+      }
+      
+      // 로깅 시작 (아직 시작되지 않은 경우)
+      if (requestId && userEnvironment) {
+        const parsedRequestType = requestType ? JSON.parse(requestType) : { visitor: true, blog: false };
+        logger.startRequest(requestId, {
+          userEnvironment: userEnvironment as 'mobile' | 'desktop' | 'unknown',
+          userAgent,
+          requestUrl: inputUrl,
+          requestType: parsedRequestType
+        });
       }
 
       let browser: any;
@@ -317,6 +342,21 @@ export const crawlVisitorReviews = onRequest(
           throw new Error("방문자 리뷰를 가져올 수 없습니다.");
         }
 
+        // 성공 시 로깅 업데이트
+        if (requestId) {
+          const processingTime = Date.now() - startTime;
+          logger.updateRequestInfo(requestId, {
+            placeId,
+            crawlingUrl: targetUrl
+          });
+          
+          logger.updateVisitorReview(requestId, {
+            reviewCount: visitorReviews.length,
+            reviews: truncateArray(visitorReviews, 30),
+            processingTime
+          });
+        }
+
         res.status(200).json({
           visitorReviews,
           visitorReviewCount: visitorReviews.length,
@@ -324,6 +364,15 @@ export const crawlVisitorReviews = onRequest(
         });
       } catch (err: any) {
         clog("🔥 처리 실패:", err);
+        
+        // 실패 시 로깅 업데이트
+        if (requestId) {
+          logger.updateVisitorReview(requestId, {
+            crawlingError: err.message,
+            processingTime: Date.now() - startTime
+          });
+        }
+        
         res.status(500).json({
           error: "방문자 리뷰 수집에 실패했습니다.",
           detail: err.message,
