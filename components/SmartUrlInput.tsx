@@ -291,9 +291,15 @@ export default function SmartUrlInput({
               border="1px solid"
               borderColor="blue.200"
             >
+<<<<<<< HEAD
               <Text fontSize="sm" color="blue.700" lineHeight="1.6" whiteSpace="pre-line">
                 <Text as="span" fontWeight="bold">💡 사용법:</Text>
                 {' 네이버 지도 주소창의 장소 URL을 복사해서 입력창에 붙여넣어주세요'}
+=======
+              <Text fontSize="sm" color="blue.700" lineHeight="1.5">
+                <Text as="span" fontWeight="bold">💡 사용법:</Text> 네이버 지도에서 장소를 검색하고, 
+                주소창의 URL을 복사해서 위 입력창에 붙여넣어주세요
+>>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
               </Text>
             </Flex>
           </ScaleFade>
@@ -301,4 +307,8 @@ export default function SmartUrlInput({
       </VStack>
     </Box>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c

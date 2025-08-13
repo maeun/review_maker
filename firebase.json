@@ -7,9 +7,12 @@
       "**/node_modules/**"
     ]
   },
+<<<<<<< HEAD
   "firestore": {
     "rules": "firestore.rules"
   },
+=======
+>>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
   "functions": {
     "source": "functions",
     "runtime": "nodejs20",

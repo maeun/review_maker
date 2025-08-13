@@ -207,6 +207,7 @@ export const crawlVisitorReviews = onRequest(
                 "--disable-background-timer-throttling",
                 "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding",
+<<<<<<< HEAD
                 "--disable-features=TranslateUI,VizDisplayCompositor",
                 "--disable-ipc-flooding-protection",
                 "--memory-pressure-off",
@@ -217,14 +218,25 @@ export const crawlVisitorReviews = onRequest(
                 "--disable-client-side-phishing-detection",
                 "--disable-prompt-on-repost",
                 "--disable-default-apps"
+=======
+                "--disable-features=TranslateUI",
+                "--disable-ipc-flooding-protection",
+                "--memory-pressure-off",
+                "--max_old_space_size=4096",
+>>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
               ],
               defaultViewport: chromium.defaultViewport,
               executablePath: await chromium.executablePath,
               headless: chromium.headless,
+<<<<<<< HEAD
               timeout: 60000, // 60초로 늘림
               protocolTimeout: 60000, // 프로토콜 타임아웃 추가
               ignoreDefaultArgs: ["--disable-extensions"],
               ignoreHTTPSErrors: true,
+=======
+              timeout: 45000,
+              ignoreDefaultArgs: ["--disable-extensions"],
+>>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
             });
 
             clog(`✅ Chrome 실행 성공 (시도 ${browserLaunchAttempts})`);
@@ -250,10 +262,17 @@ export const crawlVisitorReviews = onRequest(
               );
             }
 
+<<<<<<< HEAD
             // 재시도 전 잠시 대기 (지수 백오프)
             const delayMs = Math.min(5000 * Math.pow(2, browserLaunchAttempts - 1), 15000);
             clog(`⏱️ 재시도 전 대기: ${delayMs}ms`);
             await new Promise((resolve) => setTimeout(resolve, delayMs));
+=======
+            // 재시도 전 잠시 대기
+            await new Promise((resolve) =>
+              setTimeout(resolve, 2000 * browserLaunchAttempts)
+            );
+>>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
           }
         }
 
