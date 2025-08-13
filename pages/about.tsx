@@ -27,7 +27,7 @@ export default function About() {
   return (
     <>
       <Head>
-        <title>서비스 소개 - Review Maker | 네이버 리뷰 생성기</title>
+        <title>서비스 소개 - Review Maker</title>
         <meta name="description" content="Review Maker는 스마트 기술을 활용하여 네이버 지도 리뷰를 자동으로 생성해주는 혁신적인 도구입니다. 무료로 이용하세요." />
         <meta name="keywords" content="리뷰 생성, 네이버 지도, 방문자 리뷰, 블로그 리뷰, 자동 생성, 무료 도구" />
         <meta name="robots" content="index, follow" />
@@ -66,7 +66,8 @@ export default function About() {
                         <Icon as={FaMapMarkerAlt} boxSize={12} color="red.500" />
                         <Heading size="md">네이버 지도 연동</Heading>
                         <Text color="gray.600" lineHeight="1.6">
-                          네이버 지도 URL만 입력하면,<br />자동으로 장소의 정보를 분석합니다.
+                          네이버 지도 URL만 입력하면,<br />
+                          자동으로 장소의 정보를 분석합니다.
                         </Text>
                       </VStack>
                     </Box>

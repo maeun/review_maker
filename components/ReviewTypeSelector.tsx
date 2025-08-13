@@ -153,10 +153,7 @@ export default function ReviewTypeSelector({
           </VStack>
         </Box>
       </HStack>
-      
-      <Text fontSize="xs" color="gray.500" textAlign="center" w="100%">
-        💡 두 가지 모두 선택하면 더 풍부한 리뷰를 작성할 수 있습니다
-      </Text>
+    
     </VStack>
   );
 }

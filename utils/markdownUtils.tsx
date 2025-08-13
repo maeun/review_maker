@@ -21,11 +21,7 @@ export const parseMarkdownToPlainText = (text: string): string => {
 };
 
 // React 컴포넌트에서 사용할 수 있도록 JSX 요소로 변환
-<<<<<<< HEAD
-export const parseMarkdownToJSX = (text: string): React.ReactElement[] => {
-=======
 export const parseMarkdownToJSX = (text: string): JSX.Element[] => {
->>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
   // 불필요한 영어/한국어 문구들 제거 (백엔드에서 놓친 것들 추가 정리)
   const cleanedText = text
     .replace(/^\*?Here are the \d+ section titles?:?\*?\s*/i, "")

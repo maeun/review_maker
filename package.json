@@ -5,11 +5,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development next dev",
     "dev:prod": "cross-env NODE_ENV=production next dev",
-<<<<<<< HEAD
     "build": "cross-env NODE_ENV=production next build --no-lint",
-=======
-    "build": "cross-env NODE_ENV=production next build",
->>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
     "start": "next start",
     "export": "next export",
     "test": "playwright test",
@@ -24,17 +20,13 @@
     "@google/genai": "^1.10.0",
     "@google/generative-ai": "^0.24.1",
     "@types/cheerio": "^0.22.35",
-<<<<<<< HEAD
-=======
-    "@types/react": "^18.2.55",
->>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
     "@types/scheduler": "^0.26.0",
     "cheerio": "^1.1.2",
     "chrome-aws-lambda": "^10.1.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "framer-motion": "^10.18.0",
-    "next": "^14.0.0",
+    "next": "^14.2.30",
     "node-fetch": "^2.7.0",
     "openai": "4.20.0",
     "react": "^18.2.0",
@@ -46,10 +38,7 @@
     "@playwright/test": "^1.53.2",
     "@types/cors": "^2.8.19",
     "@types/node": "20.11.30",
-<<<<<<< HEAD
-    "@types/react": "19.1.10",
-=======
->>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
+    "@types/react": "^18.2.55",
     "@types/react-dom": "18.2.19",
     "cross-env": "^10.0.0",
     "typescript": "5.4.5"
