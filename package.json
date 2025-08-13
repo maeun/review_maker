@@ -1,0 +1,46 @@
+{
+  "name": "naver-review-gen",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development next dev",
+    "dev:prod": "cross-env NODE_ENV=production next dev",
+    "build": "cross-env NODE_ENV=production next build --no-lint",
+    "start": "next start",
+    "export": "next export",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:components": "playwright test tests/components/ --headed"
+  },
+  "dependencies": {
+    "@chakra-ui/icons": "^2.2.4",
+    "@chakra-ui/react": "^2.10.9",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@google/genai": "^1.10.0",
+    "@google/generative-ai": "^0.24.1",
+    "@types/cheerio": "^0.22.35",
+    "@types/scheduler": "^0.26.0",
+    "cheerio": "^1.1.2",
+    "chrome-aws-lambda": "^10.1.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "framer-motion": "^10.18.0",
+    "next": "^14.0.0",
+    "node-fetch": "^2.7.0",
+    "openai": "4.20.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.5.0",
+    "scheduler": "^0.23.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.2",
+    "@types/cors": "^2.8.19",
+    "@types/node": "20.11.30",
+    "@types/react": "19.1.10",
+    "@types/react-dom": "18.2.19",
+    "cross-env": "^10.0.0",
+    "typescript": "5.4.5"
+  }
+}

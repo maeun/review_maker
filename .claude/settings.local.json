@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill:*)",
+      "Bash(npm run dev:*)",
+      "Bash(rm:*)",
+      "Bash(npx playwright:*)",
+      "Bash(npm run test:components:*)",
+      "Bash(git add:*)",
+      "Bash(npm run build:*)",
+      "Bash(firebase functions:delete:*)",
+      "Bash(firebase deploy:*)",
+      "WebFetch(domain:support.google.com)",
+      "Bash(npx next:*)",
+      "Bash(set NODE_ENV=production)",
+      "WebFetch(domain:review-maker-nvr.web.app)",
+      "Bash(git push:*)",
+      "Bash(firebase functions:log:*)",
+      "Bash(firebase functions:list:*)",
+      "WebFetch(domain:us-central1-review-maker-nvr.cloudfunctions.net)",
+      "Bash(mv:*)",
+      "Bash(tasklist)",
+      "Bash(git init:*)"
+    ],
+    "deny": []
+  }
+}
