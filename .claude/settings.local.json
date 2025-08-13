@@ -20,7 +20,12 @@
       "WebFetch(domain:us-central1-review-maker-nvr.cloudfunctions.net)",
       "Bash(mv:*)",
       "Bash(tasklist)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(gh auth:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git pull:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
