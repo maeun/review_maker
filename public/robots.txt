@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://review-maker-nvr.web.app/sitemap.xml
+
+# AdSense 크롤러 허용
+User-agent: Mediapartners-Google
+Allow: /
+
+# Google 검색 크롤러 허용
+User-agent: Googlebot
+Allow: /
+
+# 크롤 딜레이 설정 (서버 부하 방지)
+Crawl-delay: 1
+
+# 불필요한 파일들 차단
+Disallow: /api/
+Disallow: /_next/
+Disallow: /functions/
+Disallow: /*.json$
+Disallow: /*.js.map$

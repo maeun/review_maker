@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Head from "next/head";
 import {
   Container,
   Heading,
@@ -14,12 +15,14 @@ import {
   useColorModeValue,
   Textarea,
   FormControl,
-  FormLabel
+  FormLabel,
+  Link
 } from "@chakra-ui/react";
 import { FaRobot, FaStar, FaMapMarkerAlt, FaLightbulb } from "react-icons/fa";
 import ReviewResult from "../components/ReviewResult";
 import SmartUrlInput from "../components/SmartUrlInput";
 import ReviewTypeSelector, { ReviewTypeOptions } from "../components/ReviewTypeSelector";
+import AdBanner from "../components/AdBanner";
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -98,7 +101,7 @@ export default function Home() {
     setRequestId(newRequestId);
     
     // 사용자 환경 감지
-    const userAgent = navigator.userAgent;
+    const userAgent = typeof window !== 'undefined' ? navigator.userAgent : '';
     const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
     const userEnvironment = isMobile ? 'mobile' : 'desktop';
     
@@ -286,7 +289,12 @@ export default function Home() {
   const featureBg = useColorModeValue("gray.50", "gray.700");
 
   return (
-    <Box minH="100vh" bgGradient={bgGradient}>
+    <>
+      <Head>
+        <title>Review Maker - 손쉽게/빠르게/완벽한 리뷰 제작</title>
+        <meta name="description" content="네이버 플레이스 리뷰를 분석하여 방문자 리뷰와 블로그 리뷰를 자동으로 생성합니다. 무료 서비스로 지금 바로 시작하세요." />
+      </Head>
+      <Box minH="100vh" bgGradient={bgGradient}>
       <Container maxW="6xl" py={{ base: 4, md: 8 }} px={{ base: 4, md: 6 }}>
         <VStack spacing={{ base: 6, md: 8 }}>
           {/* 헤더 섹션 */}
@@ -313,8 +321,9 @@ export default function Home() {
               maxW="2xl"
               lineHeight="1.6"
               px={{ base: 2, md: 0 }}
+              whiteSpace="pre-line"
             >
-              네이버 지도 URL을 입력하면 실제 방문자 후기와 블로그 리뷰를 분석해서 새로운 리뷰를 작성해드립니다
+              {'네이버 지도 URL을 입력하면 실제 방문자 후기와 블로그 리뷰를 분석해서\n새로운 리뷰를 작성해드립니다'}
             </Text>
 
             {/* 특징 카드들 */}
@@ -366,6 +375,12 @@ export default function Home() {
               </Flex>
             </HStack>
           </VStack>
+
+          {/* 상단 광고 */}
+          <AdBanner 
+            dataAdSlot="1234567890" 
+            dataAdFormat="auto"
+          />
 
           {/* 입력 섹션 */}
           <Box 
@@ -479,8 +494,38 @@ export default function Home() {
               />
             </Box>
           )}
+
+          {/* 하단 광고 */}
+          <AdBanner 
+            dataAdSlot="0987654321" 
+            dataAdFormat="auto"
+          />
+
+          {/* 푸터 링크 */}
+          <Box w="100%" maxW="4xl" pt={8}>
+            <VStack spacing={4}>
+              <HStack spacing={6} justify="center" flexWrap="wrap">
+                <Link href="/about" color="teal.500" fontSize="sm" fontWeight="medium">
+                  서비스 소개
+                </Link>
+                <Link href="/privacy" color="teal.500" fontSize="sm" fontWeight="medium">
+                  프라이버시 정책
+                </Link>
+                <Link href="/terms" color="teal.500" fontSize="sm" fontWeight="medium">
+                  이용약관
+                </Link>
+                <Link href="/contact" color="teal.500" fontSize="sm" fontWeight="medium">
+                  문의하기
+                </Link>
+              </HStack>
+              <Text fontSize="xs" color="gray.500" textAlign="center">
+                © 2025 Review Maker. All rights reserved.
+              </Text>
+            </VStack>
+          </Box>
         </VStack>
       </Container>
     </Box>
+    </>
   );
 }
