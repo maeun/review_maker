@@ -44,11 +44,7 @@ export default function LoadingAnimation({ step, progress }: LoadingAnimationPro
       case 'generating':
         return {
           icon: InfoIcon,
-<<<<<<< HEAD
           title: '리뷰 생성 중...',
-=======
-          title: 'AI 리뷰 생성 중...',
->>>>>>> b77f91ac51b395cead68dcb8ea894be86c01e03c
           description: '수집된 리뷰를 바탕으로 새로운 리뷰를 생성하고 있습니다.',
           color: 'purple',
           animation: rotate

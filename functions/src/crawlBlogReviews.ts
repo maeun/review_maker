@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import cors = require("cors");
 import { ReviewLogger, truncateArray } from "./utils/logger";
+import { getCurrentDateString } from "./utils/dateUtils";
 
 const clog = (...args: any[]) => console.log("[crawlBlogReviews]", ...args);
 
@@ -128,6 +129,7 @@ export const crawlBlogReviews = onRequest(
   (req, res) => {
     corsMiddleware(req, res, async () => {
       const startTime = Date.now();
+      const requestDate = getCurrentDateString(); // 요청 날짜 생성
       
       // 로깅 정보 추출
       const requestId = req.headers['x-request-id'] as string;
@@ -136,7 +138,7 @@ export const crawlBlogReviews = onRequest(
       let inputUrl = req.query.url as string;
       if (!inputUrl) {
         if (requestId) {
-          await logger.logError(requestId, "url 파라미터가 필요합니다.");
+          await logger.logError(requestId, "url 파라미터가 필요합니다.", requestDate);
         }
         res.status(400).json({ error: "url 파라미터가 필요합니다." });
         return;
@@ -161,6 +163,16 @@ export const crawlBlogReviews = onRequest(
           );
         }
         clog(`🆔 추출된 placeId: ${placeId}`);
+        clog(`📅 요청 날짜: ${requestDate}`);
+
+        // 요청 정보 업데이트 (일자별로 저장)
+        if (requestId) {
+          await logger.updateRequestInfo(requestId, { 
+            placeId, 
+            crawlingUrl: inputUrl,
+            requestDate 
+          });
+        }
 
         const chromium = require("chrome-aws-lambda");
 
@@ -604,36 +616,75 @@ export const crawlBlogReviews = onRequest(
           clog(
             "⚠️ 모든 블로그에서 내용 추출에 실패했습니다. 빈 결과를 반환합니다."
           );
+          
+          // 빈 결과도 로깅에 기록
+          if (requestId) {
+            await logger.updateBlogCrawling(requestId, {
+              crawledUrls: blogLinks.slice(0, 10),
+              reviewCount: 0,
+              reviews: [],
+              processingTime: Date.now() - startTime,
+              requestDate
+            });
+          }
+          
           res.status(200).json({
             blogReviews: [],
             blogReviewCount: 0,
+            crawlingData: {
+              requestId,
+              requestDate,
+              placeId: extractPlaceId(inputUrl),
+              crawlingUrl: inputUrl,
+              reviewCount: 0,
+              reviews: [],
+              blogLinks: blogLinks.slice(0, 10),
+              processingTime: Date.now() - startTime,
+              timestamp: new Date().toISOString()
+            }
           });
           return;
         }
         clog(`✅ 블로그 리뷰 ${blogReviews.length}개 추출됨`);
 
-        // 성공 로깅
+        // 일자별 크롤링 데이터 저장
+        const crawlingData = {
+          requestId,
+          requestDate,
+          placeId: extractPlaceId(inputUrl),
+          crawlingUrl: inputUrl,
+          reviewCount: blogReviews.length,
+          reviews: truncateArray(blogReviews, 5),
+          blogLinks: blogLinks.slice(0, 10),
+          processingTime: Date.now() - startTime,
+          timestamp: new Date().toISOString()
+        };
+
+        // 성공 로깅 (일자별로 저장)
         if (requestId) {
-          logger.updateBlogCrawling(requestId, {
+          await logger.updateBlogCrawling(requestId, {
             crawledUrls: blogLinks.slice(0, 10), // 최대 10개 URL만 로깅
             reviewCount: blogReviews.length,
             reviews: truncateArray(blogReviews, 5), // 최대 5개 리뷰만 로깅
-            processingTime: Date.now() - startTime
+            processingTime: Date.now() - startTime,
+            requestDate
           });
         }
 
         res.status(200).json({
           blogReviews,
           blogReviewCount: blogReviews.length,
+          crawlingData // 크롤링 메타데이터 포함
         });
       } catch (err: any) {
         clog("🔥 처리 실패:", err);
         
-        // 에러 로깅
+        // 에러 로깅 (일자별로 저장)
         if (requestId) {
-          logger.updateBlogCrawling(requestId, {
+          await logger.updateBlogCrawling(requestId, {
             crawlingError: err.message,
-            processingTime: Date.now() - startTime
+            processingTime: Date.now() - startTime,
+            requestDate
           });
         }
         

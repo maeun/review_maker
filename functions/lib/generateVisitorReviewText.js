@@ -37,12 +37,14 @@ exports.generateVisitorReviewText = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const cors = require("cors");
 const logger_1 = require("./utils/logger");
+const impressionValidator_1 = require("./utils/impressionValidator");
+const dateUtils_1 = require("./utils/dateUtils");
 const clog = (...args) => console.log("[generateVisitorReviewText]", ...args);
 const visitorPrompt = (reviews, userImpression) => {
     const basePrompt = `다음은 네이버 지도 방문자 리뷰들이다:\n${reviews.join("\n")}\n`;
     const userImpressionPart = userImpression
-        ? `\n그리고 사용자가 직접 작성한 감상은 다음과 같다:\n"${userImpression}"\n\n위 리뷰들과 사용자 감상을 종합적으로 참고하여 한글로 8~12문장 정도의 상세하고 자연스러운 방문자 후기를 작성해줘. 사용자의 감상이 기존 리뷰와 일치한다면 적극 반영하되, 너무 동떨어진 내용이라면 기존 리뷰를 우선시해줘. 다음 요소들을 포함해서 작성해줘:`
-        : `\n이 리뷰들을 바탕으로 한글로 8~12문장 정도의 상세하고 자연스러운 방문자 후기를 작성해줘. 다음 요소들을 포함해서 작성해줘:`;
+        ? `\n그리고 사용자가 직접 작성한 감상은 다음과 같다:\n"${userImpression}"\n\n위 리뷰들과 사용자 감상을 종합적으로 참고하여 한글로 6~8문장 정도의 간결하고 자연스러운 방문자 후기를 작성해줘. 사용자의 감상이 기존 리뷰와 일치한다면 적극 반영하되, 너무 동떨어진 내용이라면 기존 리뷰를 우선시해줘. 다음 요소들을 포함해서 작성해줘:`
+        : `\n이 리뷰들을 바탕으로 한글로 6~8문장 정도의 간결하고 자연스러운 방문자 후기를 작성해줘. 다음 요소들을 포함해서 작성해줘:`;
     return basePrompt + userImpressionPart + `
 1. 방문 동기나 계기
 2. 첫인상이나 외관에 대한 느낌
@@ -52,13 +54,14 @@ const visitorPrompt = (reviews, userImpression) => {
 6. 직원들의 친절도나 서비스
 7. 다른 사람들에게 추천 여부
 8. 재방문 의사
-적절한 emoji를 자연스럽게 포함하되 과하지 않게 사용하고, 긍정적이면서도 구체적인 경험담을 담아 작성해줘. 
+적절한 emoji를 자연스럽게 포함하되 과하지 않게 사용하고, 간결하면서도 핵심적인 경험담을 담아 작성해줘. 
 
 중요한 규칙:
 - 설명이나 추가 텍스트 없이 리뷰 내용만 제공해줘
 - "네,", "안녕하세요", "오늘은", "여러분" 등의 인사말로 시작하지 말고 바로 본문으로 시작해줘
 - "소개합니다", "말씀드릴게요", "이야기해볼게요" 같은 대화형 표현 사용 금지
-- 구체적인 방문 경험부터 바로 시작해줘`;
+- 구체적인 방문 경험부터 바로 시작해줘
+- 6~8문장으로 간결하게 핵심만 담아서 작성해줘`;
 };
 const corsMiddleware = cors({
     origin: ["https://review-maker-nvr.web.app", "http://localhost:3000"],
@@ -166,12 +169,13 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
     corsMiddleware(req, res, async () => {
         var _a, _b, _c, _d;
         const startTime = Date.now();
+        const requestDate = (0, dateUtils_1.getCurrentDateString)(); // 요청 날짜 생성
         // 로깅 정보 추출
         const requestId = req.headers['x-request-id'];
         const logger = logger_1.ReviewLogger.getInstance();
         if (req.method !== "POST") {
             if (requestId) {
-                await logger.logError(requestId, "POST 요청만 허용됩니다.");
+                await logger.logError(requestId, "POST 요청만 허용됩니다.", requestDate);
             }
             res.status(405).json({ error: "POST 요청만 허용됩니다." });
             return;
@@ -181,12 +185,39 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
             !Array.isArray(visitorReviews) ||
             visitorReviews.length === 0) {
             if (requestId) {
-                await logger.logError(requestId, "visitorReviews 데이터가 필요합니다.");
+                await logger.logError(requestId, "visitorReviews 데이터가 필요합니다.", requestDate);
             }
             res.status(400).json({ error: "visitorReviews 데이터가 필요합니다." });
             return;
         }
-        const prompt = visitorPrompt(visitorReviews, userImpression);
+        // User impression 검증 및 필터링
+        let validatedUserImpression = undefined;
+        let impressionValidationMessage = "";
+        if (userImpression && typeof userImpression === 'string') {
+            const validationResult = impressionValidator_1.ImpressionValidator.validateImpression(userImpression);
+            if (validationResult.isValid) {
+                validatedUserImpression = validationResult.filteredImpression;
+                impressionValidationMessage = impressionValidator_1.ImpressionValidator.getValidationMessage(validationResult.reason || 'valid');
+                clog("✅ 사용자 감상 검증 통과:", validatedUserImpression);
+            }
+            else {
+                impressionValidationMessage = impressionValidator_1.ImpressionValidator.getValidationMessage(validationResult.reason || 'invalid');
+                clog("⚠️ 사용자 감상 검증 실패:", validationResult.reason, "메시지:", impressionValidationMessage);
+                // 검증 실패 로깅
+                if (requestId) {
+                    await logger.updateVisitorReview(requestId, {
+                        impressionValidation: {
+                            original: userImpression,
+                            isValid: false,
+                            reason: validationResult.reason,
+                            message: impressionValidationMessage
+                        },
+                        requestDate
+                    });
+                }
+            }
+        }
+        const prompt = visitorPrompt(visitorReviews, validatedUserImpression);
         let visitorReviewText = "";
         try {
             // 시스템 안정화를 위한 의도적 지연 (1-3초 랜덤)
@@ -225,11 +256,12 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                 .trim();
             // OpenAI 성공 로깅
             if (requestId) {
-                logger.updateVisitorReview(requestId, {
+                await logger.updateVisitorReview(requestId, {
                     prompt: (0, logger_1.truncateString)(prompt, 1500),
                     generatedReview: (0, logger_1.truncateString)(visitorReviewText, 2000),
                     aiModel: 'openai-gpt4o',
-                    processingTime: Date.now() - startTime
+                    processingTime: Date.now() - startTime,
+                    requestDate
                 });
             }
             clog("✅ OpenAI 방문자 리뷰 생성 완료");
@@ -266,11 +298,12 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                     .trim();
                 // Gemini 성공 로깅
                 if (requestId) {
-                    logger.updateVisitorReview(requestId, {
+                    await logger.updateVisitorReview(requestId, {
                         prompt: (0, logger_1.truncateString)(prompt, 1500),
                         generatedReview: (0, logger_1.truncateString)(visitorReviewText, 2000),
                         aiModel: 'gemini-1.5-flash',
-                        processingTime: Date.now() - startTime
+                        processingTime: Date.now() - startTime,
+                        requestDate
                     });
                 }
                 clog("✅ Gemini 방문자 리뷰 생성 완료");
@@ -279,14 +312,15 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                 clog("⚠️ Gemini API 실패:", geminiError.message);
                 clog("3차: Groq API 시도");
                 try {
-                    visitorReviewText = await tryGroqVisitorFallback(visitorReviews, userImpression);
+                    visitorReviewText = await tryGroqVisitorFallback(visitorReviews, validatedUserImpression);
                     // Groq 성공 로깅
                     if (requestId) {
-                        logger.updateVisitorReview(requestId, {
+                        await logger.updateVisitorReview(requestId, {
                             prompt: (0, logger_1.truncateString)(prompt, 1500),
                             generatedReview: (0, logger_1.truncateString)(visitorReviewText, 2000),
                             aiModel: 'groq-fallback',
-                            processingTime: Date.now() - startTime
+                            processingTime: Date.now() - startTime,
+                            requestDate
                         });
                     }
                     clog("✅ Groq 방문자 리뷰 생성 완료");
@@ -295,9 +329,10 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                     clog("🔥 최종 실패: 모든 LLM 실패");
                     // 모든 LLM 실패 로깅
                     if (requestId) {
-                        logger.updateVisitorReview(requestId, {
+                        await logger.updateVisitorReview(requestId, {
                             generationError: `All LLMs failed - OpenAI: ${openAiError.message}, Gemini: ${geminiError.message}, Groq: ${groqError.message}`,
-                            processingTime: Date.now() - startTime
+                            processingTime: Date.now() - startTime,
+                            requestDate
                         });
                     }
                     res.status(500).json({
@@ -314,9 +349,10 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
         if (!visitorReviewText || visitorReviewText.trim() === "") {
             clog("⚠️ 빈 방문자 리뷰 텍스트 감지");
             if (requestId) {
-                logger.updateVisitorReview(requestId, {
+                await logger.updateVisitorReview(requestId, {
                     generationError: "생성된 리뷰 내용이 비어있습니다.",
-                    processingTime: Date.now() - startTime
+                    processingTime: Date.now() - startTime,
+                    requestDate
                 });
             }
             res.status(500).json({
@@ -327,16 +363,20 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
         }
         // 안전한 JSON 응답
         try {
-            const response = { visitorReview: visitorReviewText };
+            const response = {
+                visitorReview: visitorReviewText,
+                impressionValidation: impressionValidationMessage
+            };
             res.status(200).json(response);
             clog("✅ 방문자 리뷰 응답 전송 완료");
         }
         catch (jsonError) {
             clog("❌ JSON 응답 생성 실패:", jsonError.message);
             if (requestId) {
-                logger.updateVisitorReview(requestId, {
+                await logger.updateVisitorReview(requestId, {
                     generationError: `JSON 응답 생성 실패: ${jsonError.message}`,
-                    processingTime: Date.now() - startTime
+                    processingTime: Date.now() - startTime,
+                    requestDate
                 });
             }
             res.status(500).json({

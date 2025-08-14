@@ -33,7 +33,7 @@ export const initializeLogging = onRequest(
       const logger = ReviewLogger.getInstance();
 
       try {
-        logger.startRequest(requestId, {
+        await logger.startRequest(requestId, {
           userEnvironment: userEnvironment || 'unknown',
           userAgent,
           requestUrl,

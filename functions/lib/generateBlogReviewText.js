@@ -37,6 +37,8 @@ exports.generateBlogReviewText = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const cors = require("cors");
 const logger_1 = require("./utils/logger");
+const impressionValidator_1 = require("./utils/impressionValidator");
+const dateUtils_1 = require("./utils/dateUtils");
 const clog = (...args) => console.log("[generateBlogReviewText]", ...args);
 const systemPrompt = "You are an expert Korean blog writer specializing in positive, authentic reviews. Write in natural, friendly style for blog readers. Never use '체험' or '경험'. Use CONSISTENT formal speech (존댓말) throughout - always use '~요', '~습니다', '~예요' endings. Use sophisticated but approachable vocabulary. Add emojis sparingly for emphasis. Focus on specific positive details and personal observations. Always maintain a positive, enthusiastic tone while being authentic. Avoid negative comments or complaints.";
 const digestPrompt = (reviews, userImpression) => {
@@ -343,12 +345,13 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
     corsMiddleware(req, res, async () => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
         const startTime = Date.now();
+        const requestDate = (0, dateUtils_1.getCurrentDateString)(); // 요청 날짜 생성
         // 로깅 정보 추출
         const requestId = req.headers['x-request-id'];
         const logger = logger_1.ReviewLogger.getInstance();
         if (req.method !== "POST") {
             if (requestId) {
-                await logger.logError(requestId, "POST 요청만 허용됩니다.");
+                await logger.logError(requestId, "POST 요청만 허용됩니다.", requestDate);
             }
             res.status(405).json({ error: "POST 요청만 허용됩니다." });
             return;
@@ -358,10 +361,37 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
             !Array.isArray(blogReviews) ||
             blogReviews.length === 0) {
             if (requestId) {
-                await logger.logError(requestId, "blogReviews 데이터가 필요합니다.");
+                await logger.logError(requestId, "blogReviews 데이터가 필요합니다.", requestDate);
             }
             res.status(400).json({ error: "blogReviews 데이터가 필요합니다." });
             return;
+        }
+        // User impression 검증 및 필터링
+        let validatedUserImpression = undefined;
+        let impressionValidationMessage = "";
+        if (userImpression && typeof userImpression === 'string') {
+            const validationResult = impressionValidator_1.ImpressionValidator.validateImpression(userImpression);
+            if (validationResult.isValid) {
+                validatedUserImpression = validationResult.filteredImpression;
+                impressionValidationMessage = impressionValidator_1.ImpressionValidator.getValidationMessage(validationResult.reason || 'valid');
+                clog("✅ 사용자 감상 검증 통과:", validatedUserImpression);
+            }
+            else {
+                impressionValidationMessage = impressionValidator_1.ImpressionValidator.getValidationMessage(validationResult.reason || 'invalid');
+                clog("⚠️ 사용자 감상 검증 실패:", validationResult.reason, "메시지:", impressionValidationMessage);
+                // 검증 실패 로깅
+                if (requestId) {
+                    await logger.updateBlogReview(requestId, {
+                        impressionValidation: {
+                            original: userImpression,
+                            isValid: false,
+                            reason: validationResult.reason,
+                            message: impressionValidationMessage
+                        },
+                        requestDate
+                    });
+                }
+            }
         }
         let blogReviewText = "";
         // 재시도 헬퍼 함수
@@ -397,7 +427,7 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 model: "gpt-4o",
                 messages: [
                     ...openaiHistory,
-                    { role: "user", content: digestPrompt(blogReviews, userImpression) },
+                    { role: "user", content: digestPrompt(blogReviews, validatedUserImpression) },
                 ],
                 temperature: 0.7,
                 max_tokens: 1000,
@@ -478,14 +508,15 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
             blogReviewText = `**${title}**\n\n${cleanBody}`;
             // OpenAI 성공 로깅
             if (requestId) {
-                const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, userImpression)}\n\nIndex: ${indexPrompt(reviewSummary)}\n\nSection: ${sectionPrompt('[섹션]', reviewSummary)}\n\nTitle: ${titlePrompt(blogBody)}`;
-                logger.updateBlogReview(requestId, {
+                const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression)}\n\nIndex: ${indexPrompt(reviewSummary)}\n\nSection: ${sectionPrompt('[섹션]', reviewSummary)}\n\nTitle: ${titlePrompt(blogBody)}`;
+                await logger.updateBlogReview(requestId, {
                     reviewCount: blogReviews.length,
                     reviews: (0, logger_1.truncateArray)(blogReviews, 10),
                     prompt: (0, logger_1.truncateString)(combinedPrompt, 2000),
                     generatedReview: (0, logger_1.truncateString)(blogReviewText, 3000),
                     aiModel: 'openai-gpt4o',
-                    processingTime: Date.now() - startTime
+                    processingTime: Date.now() - startTime,
+                    requestDate
                 });
             }
             clog("✅ OpenAI 최종 블로그 리뷰 생성 완료");
@@ -499,7 +530,7 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 // 1단계: 리뷰 요약 (재시도 로직 적용)
                 const reviewSummary = await retryWithDelay(() => model
-                    .generateContent(`${systemPrompt}\n\n${digestPrompt(blogReviews, userImpression)}`)
+                    .generateContent(`${systemPrompt}\n\n${digestPrompt(blogReviews, validatedUserImpression)}`)
                     .then((result) => result.response.text().trim()));
                 clog(`📝 Gemini 요약 생성 완료: ${reviewSummary.slice(0, 100)}...`);
                 // 2단계: 목차 생성 (재시도 로직 적용)
@@ -551,17 +582,18 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 clog("⚠️ Gemini API 실패:", geminiError.message);
                 clog("3차: Groq API 시도");
                 try {
-                    blogReviewText = await tryGroqModels(blogReviews, userImpression);
+                    blogReviewText = await tryGroqModels(blogReviews, validatedUserImpression);
                     // Groq 성공 로깅
                     if (requestId) {
-                        const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, userImpression)}\n\nGroq Fallback Chain`;
-                        logger.updateBlogReview(requestId, {
+                        const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression)}\n\nGroq Fallback Chain`;
+                        await logger.updateBlogReview(requestId, {
                             reviewCount: blogReviews.length,
                             reviews: (0, logger_1.truncateArray)(blogReviews, 10),
                             prompt: (0, logger_1.truncateString)(combinedPrompt, 2000),
                             generatedReview: (0, logger_1.truncateString)(blogReviewText, 3000),
                             aiModel: 'groq-fallback',
-                            processingTime: Date.now() - startTime
+                            processingTime: Date.now() - startTime,
+                            requestDate
                         });
                     }
                     clog("✅ Groq 최종 블로그 리뷰 생성 완료");
@@ -570,9 +602,10 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                     clog("🔥 최종 실패: 모든 LLM 실패");
                     // 모든 LLM 실패 로깅
                     if (requestId) {
-                        logger.updateBlogReview(requestId, {
+                        await logger.updateBlogReview(requestId, {
                             generationError: `All LLMs failed - OpenAI: ${openAiError.message}, Gemini: ${geminiError.message}, Groq: ${groqError.message}`,
-                            processingTime: Date.now() - startTime
+                            processingTime: Date.now() - startTime,
+                            requestDate
                         });
                     }
                     res.status(500).json({
@@ -596,7 +629,10 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
         }
         // 안전한 JSON 응답
         try {
-            const response = { blogReview: blogReviewText };
+            const response = {
+                blogReview: blogReviewText,
+                impressionValidation: impressionValidationMessage
+            };
             res.status(200).json(response);
             clog("✅ 블로그 리뷰 응답 전송 완료");
         }

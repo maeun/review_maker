@@ -27,7 +27,7 @@ exports.initializeLogging = (0, https_1.onRequest)({
         }
         const logger = logger_1.ReviewLogger.getInstance();
         try {
-            logger.startRequest(requestId, {
+            await logger.startRequest(requestId, {
                 userEnvironment: userEnvironment || 'unknown',
                 userAgent,
                 requestUrl,

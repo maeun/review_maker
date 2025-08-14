@@ -1,6 +1,8 @@
 import { onRequest } from "firebase-functions/v2/https";
 import cors = require("cors");
 import { ReviewLogger, truncateString, truncateArray } from "./utils/logger";
+import { ImpressionValidator } from "./utils/impressionValidator";
+import { getCurrentDateString } from "./utils/dateUtils";
 
 const clog = (...args: any[]) =>
   console.log("[generateBlogReviewText]", ...args);
@@ -396,6 +398,7 @@ export const generateBlogReviewText = onRequest(
   (req, res) => {
     corsMiddleware(req, res, async () => {
       const startTime = Date.now();
+      const requestDate = getCurrentDateString(); // 요청 날짜 생성
       
       // 로깅 정보 추출
       const requestId = req.headers['x-request-id'] as string;
@@ -403,7 +406,7 @@ export const generateBlogReviewText = onRequest(
       
       if (req.method !== "POST") {
         if (requestId) {
-          await logger.logError(requestId, "POST 요청만 허용됩니다.");
+          await logger.logError(requestId, "POST 요청만 허용됩니다.", requestDate);
         }
         res.status(405).json({ error: "POST 요청만 허용됩니다." });
         return;
@@ -416,10 +419,40 @@ export const generateBlogReviewText = onRequest(
         blogReviews.length === 0
       ) {
         if (requestId) {
-          await logger.logError(requestId, "blogReviews 데이터가 필요합니다.");
+          await logger.logError(requestId, "blogReviews 데이터가 필요합니다.", requestDate);
         }
         res.status(400).json({ error: "blogReviews 데이터가 필요합니다." });
         return;
+      }
+
+      // User impression 검증 및 필터링
+      let validatedUserImpression: string | undefined = undefined;
+      let impressionValidationMessage = "";
+      
+      if (userImpression && typeof userImpression === 'string') {
+        const validationResult = ImpressionValidator.validateImpression(userImpression);
+        
+        if (validationResult.isValid) {
+          validatedUserImpression = validationResult.filteredImpression;
+          impressionValidationMessage = ImpressionValidator.getValidationMessage(validationResult.reason || 'valid');
+          clog("✅ 사용자 감상 검증 통과:", validatedUserImpression);
+        } else {
+          impressionValidationMessage = ImpressionValidator.getValidationMessage(validationResult.reason || 'invalid');
+          clog("⚠️ 사용자 감상 검증 실패:", validationResult.reason, "메시지:", impressionValidationMessage);
+          
+          // 검증 실패 로깅
+          if (requestId) {
+            await logger.updateBlogReview(requestId, {
+              impressionValidation: {
+                original: userImpression,
+                isValid: false,
+                reason: validationResult.reason,
+                message: impressionValidationMessage
+              },
+              requestDate
+            });
+          }
+        }
       }
 
       let blogReviewText = "";
@@ -464,7 +497,7 @@ export const generateBlogReviewText = onRequest(
             model: "gpt-4o",
             messages: [
               ...openaiHistory,
-              { role: "user", content: digestPrompt(blogReviews, userImpression) },
+              { role: "user", content: digestPrompt(blogReviews, validatedUserImpression) },
             ],
             temperature: 0.7,
             max_tokens: 1000,
@@ -574,14 +607,15 @@ export const generateBlogReviewText = onRequest(
         
         // OpenAI 성공 로깅
         if (requestId) {
-          const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, userImpression)}\n\nIndex: ${indexPrompt(reviewSummary)}\n\nSection: ${sectionPrompt('[섹션]', reviewSummary)}\n\nTitle: ${titlePrompt(blogBody)}`;
-          logger.updateBlogReview(requestId, {
+          const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression)}\n\nIndex: ${indexPrompt(reviewSummary)}\n\nSection: ${sectionPrompt('[섹션]', reviewSummary)}\n\nTitle: ${titlePrompt(blogBody)}`;
+          await logger.updateBlogReview(requestId, {
             reviewCount: blogReviews.length,
             reviews: truncateArray(blogReviews, 10),
             prompt: truncateString(combinedPrompt, 2000),
             generatedReview: truncateString(blogReviewText, 3000),
             aiModel: 'openai-gpt4o',
-            processingTime: Date.now() - startTime
+            processingTime: Date.now() - startTime,
+            requestDate
           });
         }
         
@@ -601,7 +635,7 @@ export const generateBlogReviewText = onRequest(
           const reviewSummary = await retryWithDelay(() =>
             model
               .generateContent(
-                `${systemPrompt}\n\n${digestPrompt(blogReviews, userImpression)}`
+                `${systemPrompt}\n\n${digestPrompt(blogReviews, validatedUserImpression)}`
               )
               .then((result) => result.response.text().trim())
           );
@@ -680,18 +714,19 @@ export const generateBlogReviewText = onRequest(
           clog("3차: Groq API 시도");
 
           try {
-            blogReviewText = await tryGroqModels(blogReviews, userImpression);
+            blogReviewText = await tryGroqModels(blogReviews, validatedUserImpression);
             
             // Groq 성공 로깅
             if (requestId) {
-              const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, userImpression)}\n\nGroq Fallback Chain`;
-              logger.updateBlogReview(requestId, {
+              const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression)}\n\nGroq Fallback Chain`;
+              await logger.updateBlogReview(requestId, {
                 reviewCount: blogReviews.length,
                 reviews: truncateArray(blogReviews, 10),
                 prompt: truncateString(combinedPrompt, 2000),
                 generatedReview: truncateString(blogReviewText, 3000),
                 aiModel: 'groq-fallback',
-                processingTime: Date.now() - startTime
+                processingTime: Date.now() - startTime,
+                requestDate
               });
             }
             
@@ -701,9 +736,10 @@ export const generateBlogReviewText = onRequest(
             
             // 모든 LLM 실패 로깅
             if (requestId) {
-              logger.updateBlogReview(requestId, {
+              await logger.updateBlogReview(requestId, {
                 generationError: `All LLMs failed - OpenAI: ${openAiError.message}, Gemini: ${geminiError.message}, Groq: ${groqError.message}`,
-                processingTime: Date.now() - startTime
+                processingTime: Date.now() - startTime,
+                requestDate
               });
             }
             
@@ -730,7 +766,10 @@ export const generateBlogReviewText = onRequest(
 
       // 안전한 JSON 응답
       try {
-        const response = { blogReview: blogReviewText };
+        const response = { 
+          blogReview: blogReviewText,
+          impressionValidation: impressionValidationMessage
+        };
         res.status(200).json(response);
         clog("✅ 블로그 리뷰 응답 전송 완료");
       } catch (jsonError: any) {

@@ -292,8 +292,8 @@ export default function SmartUrlInput({
               borderColor="blue.200"
             >
               <Text fontSize="sm" color="blue.700" lineHeight="1.5">
-                <Text as="span" fontWeight="bold">💡 사용법:</Text> 네이버 지도에서 장소를 검색하고, 
-                주소창의 URL을 복사해서 위 입력창에 붙여넣어주세요
+                <Text as="span" fontWeight="bold">💡 사용법:</Text> 네이버 지도에서 장소를 검색하고
+                URL을 복사해서 붙여넣어주세요
               </Text>
             </Flex>
           </ScaleFade>

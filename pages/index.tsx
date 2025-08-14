@@ -43,6 +43,7 @@ export default function Home() {
 
   const [placeId, setPlaceId] = useState<string | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [impressionFeedback, setImpressionFeedback] = useState("");
   const toast = useToast();
 
   const handleUrlChange = (newUrl: string) => {
@@ -95,6 +96,7 @@ export default function Home() {
     setBlogReview("");
     setBlogReviewCount(0);
     setPlaceId(null);
+    setImpressionFeedback("");
     
     // 새로운 요청 ID 생성
     const newRequestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -184,6 +186,11 @@ export default function Home() {
           if (!res.ok) throw new Error("방문자 리뷰 작성 실패");
           const data = await res.json();
           setVisitorReview(data.visitorReview);
+          
+          // impression validation 피드백 처리
+          if (data.impressionValidation && !impressionFeedback) {
+            setImpressionFeedback(data.impressionValidation);
+          }
         } catch (err) {
           console.error(err);
           setVisitorReview("오류: 방문자 리뷰 작성 중 문제가 발생했습니다.");
@@ -235,6 +242,11 @@ export default function Home() {
           if (!genRes.ok) throw new Error("블로그 리뷰 작성 실패");
           const genData = await genRes.json();
           setBlogReview(genData.blogReview);
+          
+          // impression validation 피드백 처리 (방문자 리뷰가 없는 경우)
+          if (genData.impressionValidation && !impressionFeedback) {
+            setImpressionFeedback(genData.impressionValidation);
+          }
         } catch (err: any) {
           console.error(err);
           setBlogReview(
@@ -444,6 +456,20 @@ export default function Home() {
                 >
                   * 작성하신 감상이 리뷰 생성에 반영됩니다
                 </Text>
+                {impressionFeedback && (
+                  <Text 
+                    fontSize="sm" 
+                    color={impressionFeedback.includes("반영됩니다") ? "green.600" : "orange.600"}
+                    mt={2}
+                    p={2}
+                    bg={impressionFeedback.includes("반영됩니다") ? "green.50" : "orange.50"}
+                    borderRadius="md"
+                    border="1px solid"
+                    borderColor={impressionFeedback.includes("반영됩니다") ? "green.200" : "orange.200"}
+                  >
+                    {impressionFeedback}
+                  </Text>
+                )}
               </FormControl>
               
               <Button
