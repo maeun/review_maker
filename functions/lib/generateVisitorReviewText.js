@@ -39,6 +39,7 @@ const cors = require("cors");
 const logger_1 = require("./utils/logger");
 const impressionValidator_1 = require("./utils/impressionValidator");
 const dateUtils_1 = require("./utils/dateUtils");
+const firestoreLogger_1 = require("./utils/firestoreLogger");
 const clog = (...args) => console.log("[generateVisitorReviewText]", ...args);
 const getToneInstruction = (toneMode) => {
     switch (toneMode) {
@@ -69,6 +70,14 @@ const visitorPrompt = (reviews, userImpression, toneMode) => {
 7. 다른 사람들에게 추천 여부
 8. 재방문 의사
 적절한 emoji를 자연스럽게 포함하되 과하지 않게 사용하고, 간결하면서도 핵심적인 경험담을 담아 작성해줘. 
+
+**매우 중요한 톤 지침**:
+- 반드시 긍정적이고 만족스러운 경험으로만 작성해줘
+- 부정적인 표현, 불만, 비판, 실망감 등은 절대 포함하지 말고
+- 추천하고 싶고 다시 방문하고 싶다는 긍정적인 어조로만 작성해줘
+- 맛, 서비스, 분위기 모든 면에서 만족스럽다는 내용으로 작성해줘
+- "실망", "아쉬움", "별로", "그저 그래", "쏘쏘" 같은 부정적 표현 금지
+- "맛있었다", "좋았다", "만족스럽다", "추천한다" 같은 긍정적 표현만 사용해줘
 
 중요한 규칙:
 - 설명이나 추가 텍스트 없이 리뷰 내용만 제공해줘
@@ -277,6 +286,15 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                     processingTime: Date.now() - startTime,
                     requestDate
                 });
+                // Firestore에 성공 데이터 저장
+                const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                await firestoreLogger.updateVisitorReviewData(requestId, {
+                    generationPrompt: (0, logger_1.truncateString)(prompt, 1500),
+                    generatedReview: (0, logger_1.truncateString)(visitorReviewText, 2000),
+                    aiModel: 'openai-gpt4o',
+                    generationSuccess: true,
+                    processingTimeSeconds: Math.round((Date.now() - startTime) / 1000)
+                });
             }
             clog("✅ OpenAI 방문자 리뷰 생성 완료");
         }
@@ -319,6 +337,15 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                         processingTime: Date.now() - startTime,
                         requestDate
                     });
+                    // Firestore에 성공 데이터 저장
+                    const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                    await firestoreLogger.updateVisitorReviewData(requestId, {
+                        generationPrompt: (0, logger_1.truncateString)(prompt, 1500),
+                        generatedReview: (0, logger_1.truncateString)(visitorReviewText, 2000),
+                        aiModel: 'gemini-1.5-flash',
+                        generationSuccess: true,
+                        processingTimeSeconds: Math.round((Date.now() - startTime) / 1000)
+                    });
                 }
                 clog("✅ Gemini 방문자 리뷰 생성 완료");
             }
@@ -336,6 +363,15 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                             processingTime: Date.now() - startTime,
                             requestDate
                         });
+                        // Firestore에 성공 데이터 저장
+                        const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                        await firestoreLogger.updateVisitorReviewData(requestId, {
+                            generationPrompt: (0, logger_1.truncateString)(prompt, 1500),
+                            generatedReview: (0, logger_1.truncateString)(visitorReviewText, 2000),
+                            aiModel: 'groq-fallback',
+                            generationSuccess: true,
+                            processingTimeSeconds: Math.round((Date.now() - startTime) / 1000)
+                        });
                     }
                     clog("✅ Groq 방문자 리뷰 생성 완료");
                 }
@@ -348,6 +384,14 @@ exports.generateVisitorReviewText = (0, https_1.onRequest)({
                             processingTime: Date.now() - startTime,
                             requestDate
                         });
+                        // Firestore에 실패 데이터 저장
+                        const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                        await firestoreLogger.updateVisitorReviewData(requestId, {
+                            generationSuccess: false,
+                            errorMessage: `모든 LLM 실패 - OpenAI: ${openAiError.message}, Gemini: ${geminiError.message}, Groq: ${groqError.message}`,
+                            processingTimeSeconds: Math.round((Date.now() - startTime) / 1000)
+                        });
+                        await firestoreLogger.logError(requestId, 'visitor', `모든 LLM 실패`);
                     }
                     res.status(500).json({
                         error: "모든 LLM에서 리뷰 생성에 실패했습니다.",

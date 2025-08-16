@@ -4,6 +4,7 @@ exports.initializeLogging = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const cors = require("cors");
 const logger_1 = require("./utils/logger");
+const firestoreLogger_1 = require("./utils/firestoreLogger");
 const clog = (...args) => console.log("[initializeLogging]", ...args);
 const corsMiddleware = cors({
     origin: ["https://review-maker-nvr.web.app", "http://localhost:3000"],
@@ -18,7 +19,7 @@ exports.initializeLogging = (0, https_1.onRequest)({
             res.status(405).json({ error: "POST 요청만 허용됩니다." });
             return;
         }
-        const { requestId, requestUrl, requestType, userImpression } = req.body;
+        const { requestId, requestUrl, requestType, userImpression, toneMode } = req.body;
         const userEnvironment = req.headers['x-user-environment'];
         const userAgent = req.headers['x-user-agent'];
         if (!requestId || !requestUrl || !requestType) {
@@ -26,7 +27,9 @@ exports.initializeLogging = (0, https_1.onRequest)({
             return;
         }
         const logger = logger_1.ReviewLogger.getInstance();
+        const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
         try {
+            // 기존 메모리 로깅
             await logger.startRequest(requestId, {
                 userEnvironment: userEnvironment || 'unknown',
                 userAgent,
@@ -34,7 +37,9 @@ exports.initializeLogging = (0, https_1.onRequest)({
                 requestType,
                 userImpression: userImpression || ""
             });
-            clog(`✅ 로깅 초기화 완료: ${requestId}`);
+            // Firestore 로깅 추가
+            await firestoreLogger.initializeRequest(requestId, requestUrl, userEnvironment || 'unknown', userImpression || "", requestType, toneMode || 'casual');
+            clog(`✅ 로깅 초기화 완료 (메모리 + Firestore): ${requestId}`);
             res.status(200).json({ success: true, message: "로깅 초기화 완료" });
         }
         catch (error) {

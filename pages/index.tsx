@@ -131,7 +131,8 @@ export default function Home() {
             requestId: newRequestId,
             requestUrl: url,
             requestType: reviewTypes,
-            userImpression: userImpression
+            userImpression: userImpression,
+            toneMode: toneMode
           }),
         });
       } catch (logInitError) {

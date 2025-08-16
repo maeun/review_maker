@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import cors = require("cors");
 import { ReviewLogger } from "./utils/logger";
+import { FirestoreLogger } from "./utils/firestoreLogger";
 
 const clog = (...args: any[]) => console.log("[completeRequest]", ...args);
 
@@ -29,15 +30,24 @@ export const completeRequest = onRequest(
       }
 
       const logger = ReviewLogger.getInstance();
+      const firestoreLogger = FirestoreLogger.getInstance();
 
       try {
+        // 기존 메모리 로깅
         await logger.finishRequest(requestId, {
           totalProcessingTime: totalProcessingTime || 0,
           success: success || false,
           errorMessage
         });
 
-        clog(`✅ 요청 완료 로그 저장: ${requestId}`);
+        // Firestore 요청 완료 로깅
+        await firestoreLogger.completeRequest(
+          requestId,
+          success || false,
+          Math.round((totalProcessingTime || 0) / 1000) // 밀리초를 초로 변환
+        );
+
+        clog(`✅ 요청 완료 로그 저장 (메모리 + Firestore): ${requestId}`);
         res.status(200).json({ success: true, message: "로그 저장 완료" });
       } catch (error) {
         clog(`❌ 요청 완료 로그 저장 실패: ${requestId}`, error);

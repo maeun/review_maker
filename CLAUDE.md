@@ -8,10 +8,13 @@
 - **스마트 URL 입력**: 실시간 검증, 클립보드 지원, 단축 URL 자동 해석
 - **선택적 리뷰 생성**: 방문자 리뷰와 블로그 리뷰 개별 선택 가능
 - **톤앤매너 선택**: 젠틀모드/일상모드/발랄모드 3가지 어투 지원 (✅ 2025-01-13 구현 완료)
-- **사용자 감상 반영**: 개인 경험을 리뷰 생성에 통합
+- **사용자 감상 반영**: 개인 경험을 리뷰 생성에 통합 및 검증 시스템
 - **다중 AI Fallback**: OpenAI GPT-4 → Gemini → Groq 순차 시도
 - **실시간 진행 추적**: 단계별 애니메이션, 진행률, 예상 완료 시간
 - **반응형 UI/UX**: 모바일/데스크탑 최적화된 Chakra UI 디자인
+- **크롤링 안정성**: 3회 재시도 메커니즘으로 간헐적 실패 방지 (✅ 2025-01-16 구현 완료)
+- **긍정적 리뷰 강제**: AI 모델이 부정적 리뷰 생성 방지 시스템 (✅ 2025-01-16 구현 완료)
+- **포괄적 데이터 저장**: Firestore 기반 요청별 상세 데이터 추적 (✅ 2025-01-13 구현 완료)
 
 ## 🏗️ 아키텍처 구조
 
@@ -38,13 +41,17 @@ review_maker/
 │   └── AdBanner.tsx          # 광고 배너
 ├── functions/               # Firebase Functions (Backend)
 │   ├── src/                 # TypeScript 소스 코드
-│   │   ├── crawlVisitorReviews.ts    # 방문자 리뷰 크롤링
+│   │   ├── crawlVisitorReviews.ts    # 방문자 리뷰 크롤링 (3회 재시도 로직)
 │   │   ├── crawlBlogReviews.ts       # 블로그 리뷰 크롤링
-│   │   ├── generateVisitorReviewText.ts # 방문자 리뷰 생성
-│   │   ├── generateBlogReviewText.ts    # 블로그 리뷰 생성
-│   │   ├── initializeLogging.ts      # 로깅 초기화
-│   │   ├── completeRequest.ts        # 요청 완료 처리
-│   │   └── utils/logger.ts           # 통합 로깅 시스템
+│   │   ├── generateVisitorReviewText.ts # 방문자 리뷰 생성 (긍정적 톤 강제)
+│   │   ├── generateBlogReviewText.ts    # 블로그 리뷰 생성 (긍정적 톤 강제)
+│   │   ├── initializeLogging.ts      # 로깅 초기화 (Firestore 통합)
+│   │   ├── completeRequest.ts        # 요청 완료 처리 (Firestore 통합)
+│   │   └── utils/
+│   │       ├── logger.ts             # 통합 로깅 시스템
+│   │       ├── firestoreLogger.ts    # Firestore 데이터 저장 시스템
+│   │       ├── impressionValidator.ts # 사용자 감상 검증 시스템
+│   │       └── dateUtils.ts          # 날짜 유틸리티 함수
 │   └── lib/                 # 컴파일된 JavaScript 파일
 ├── utils/                   # 공통 유틸리티
 │   ├── urlUtils.ts          # URL 검증 및 처리
@@ -275,8 +282,10 @@ export interface ToneModeOption {
 - **지능형 URL 해석**: naver.me 단축 URL 자동 해석
 - **안정적인 브라우저 실행**: 재시도 로직 (EFAULT 에러 방지)
 - **다중 셀렉터 전략**: DOM 변경에 대응하는 Fallback 셀렉터
+- **3회 재시도 메커니즘**: 간헐적 크롤링 실패 자동 복구 (✅ 2025-01-16 신규 추가)
+- **페이지 새로고침**: 재시도 시 페이지 상태 초기화로 안정성 보장
 - **시스템 안정화**: 랜덤 지연으로 과부하 방지
-- **통합 로깅**: 요청 ID 기반 추적
+- **통합 로깅**: 요청 ID 기반 추적 및 Firestore 연동
 
 **크롤링 셀렉터:**
 ```typescript
@@ -307,11 +316,12 @@ const selectors = [
 ```
 
 **프롬프트 최적화:**
-- 사용자 개인 감상 통합
+- 사용자 개인 감상 통합 및 검증 시스템
 - 톤앤매너 맞춤형 어투 적용
-- 8-12문장 구조화된 리뷰
+- 6-8문장 구조화된 리뷰
 - 이모지 자연스러운 활용
 - 인사말/대화형 표현 제거 로직
+- **긍정적 리뷰 강제 시스템**: 부정적 표현 완전 차단 (✅ 2025-01-16 신규 추가)
 
 **톤앤매너 지침 시스템:**
 ```typescript
@@ -333,6 +343,7 @@ const getToneInstruction = (toneMode: string) => {
 - 마크다운 형식 지원
 - 구조화된 컨텍스트 관리
 - 톤앤매너 기반 블로그 스타일 적용
+- **긍정적 리뷰 강제 시스템**: 블로그에서도 부정적 표현 완전 차단 (✅ 2025-01-16 신규 추가)
 
 #### `initializeLogging.ts` + `completeRequest.ts` - 로깅 시스템
 **핵심 역할**: 통합 요청 추적 및 분석
@@ -352,6 +363,34 @@ interface RequestInfo {
 - 요청별 상세 추적
 - 성능 메트릭 수집
 - 에러 분석 데이터
+
+#### `utils/firestoreLogger.ts` - Firestore 데이터 저장 시스템 (✅ 2025-01-13 신규 추가)
+**핵심 역할**: 포괄적 요청 데이터 Firestore 저장
+```typescript
+// 데이터 구조 예시
+/requests/{YYYY-MM-DD}/daily/{requestId}
+{
+  requestTime: timestamp,
+  userEnvironment: 'mobile' | 'desktop',
+  toneMode: 1 | 2 | 3, // 젠틀모드-1, 일상모드-2, 발랄모드-3
+  userImpression: string,
+  visitorReviewData: { /* 크롤링 및 생성 데이터 */ },
+  blogReviewData: { /* 크롤링 및 생성 데이터 */ },
+  aiModelUsed: string[], // 사용된 AI 모델 추적
+  processingTimes: { /* 단계별 처리 시간 */ }
+}
+```
+
+#### `utils/impressionValidator.ts` - 사용자 감상 검증 시스템 (✅ 2025-01-13 신규 추가)
+**핵심 역할**: 사용자 입력 감상 검증 및 필터링
+- 스팸 및 부적절한 내용 필터링
+- 글자 수 제한 및 형식 검증
+- 검증 실패 시 친화적 안내 메시지 제공
+
+#### `utils/dateUtils.ts` - 날짜 유틸리티 (✅ 2025-01-13 신규 추가)
+**핵심 역할**: 일자별 데이터 조직화 지원
+- YYYY-MM-DD 형식 날짜 문자열 생성
+- 타임존 처리 및 일관된 날짜 관리
 
 ## 🔧 개발 가이드라인
 
@@ -1226,6 +1265,88 @@ if (url.includes('<script>') || url.includes('javascript:')) {
 }
 ```
 
+## 🎉 최근 구현 완료 기능 (2025-01-13 ~ 2025-01-16)
+
+### ✅ Firestore 데이터 저장 시스템 (2025-01-13)
+**핵심 성과**: 포괄적 데이터 추적 및 분석 기반 구축
+
+#### 구현된 기능:
+- **일자별 데이터 구조**: `/requests/{YYYY-MM-DD}/daily/{requestId}` 체계
+- **요청 생명주기 추적**: 초기화 → 크롤링 → AI 생성 → 완료까지 전 과정 기록
+- **AI 모델 사용 추적**: OpenAI, Gemini, Groq 등 사용된 모델 정보 저장
+- **성능 메트릭**: 단계별 처리 시간 측정 및 분석 데이터 수집
+- **사용자 환경 분석**: 모바일/데스크탑 접속 패턴 추적
+
+#### 데이터 구조 예시:
+```typescript
+interface RequestData {
+  requestTime: Timestamp;
+  userEnvironment: 'mobile' | 'desktop' | 'unknown';
+  toneMode: ToneModeEnum; // 1=젠틀, 2=일상, 3=발랄
+  userImpression: string;
+  placeId: string;
+  crawlingUrl: string;
+  
+  visitorReviewData: {
+    referenceReviewCount: number;
+    referenceReviews: string[];
+    generationPrompt: string;
+    generatedReview: string;
+    aiModel: 'openai-gpt4o' | 'gemini-1.5-flash' | 'groq-fallback';
+    crawlingSuccess: boolean;
+    generationSuccess: boolean;
+    processingTimeSeconds: number;
+  };
+  
+  blogReviewData: {
+    // 블로그 리뷰 관련 동일 구조
+  };
+}
+```
+
+### ✅ 크롤링 안정성 개선 (2025-01-16)
+**핵심 성과**: 간헐적 크롤링 실패 문제 해결
+
+#### 구현된 기능:
+- **3회 재시도 메커니즘**: `.pui__vn15t2` 셀렉터 실패 시 자동 재시도
+- **지수 백오프 대기**: 3초 → 5초 → 7초 점진적 지연
+- **페이지 새로고침**: 재시도 시 DOM 상태 완전 초기화
+- **iframe 재감지**: 새로고침 후 iframe 다시 찾기
+- **상세 로깅**: 각 시도와 실패 원인 추적
+
+#### 재시도 로직:
+```typescript
+// 3회 재시도 구조
+for (let attempt = 1; attempt <= 3; attempt++) {
+  // 셀렉터 시도
+  if (성공) return { reviews, usedSelector };
+  
+  if (attempt < 3) {
+    // 페이지 새로고침 + 지연 대기
+    await page.reload();
+    await delay(3000 + attempt * 2000);
+  }
+}
+```
+
+### ✅ 긍정적 리뷰 생성 강제 시스템 (2025-01-16)
+**핵심 성과**: 부정적 리뷰 생성 완전 차단
+
+#### 구현된 기능:
+- **강력한 프롬프트 지침**: AI 모델에 긍정적 톤 강제
+- **부정적 표현 명시적 금지**: "실망", "아쉬움", "별로" 등 차단
+- **긍정적 표현 권장**: "맛있었다", "좋았다", "추천한다" 사용 강제
+- **방문자/블로그 리뷰 모두 적용**: 일관된 긍정적 톤 보장
+
+#### 프롬프트 개선 예시:
+```typescript
+**매우 중요한 톤 지침**:
+- 반드시 긍정적이고 만족스러운 경험으로만 작성해줘
+- 부정적인 표현, 불만, 비판, 실망감 등은 절대 포함하지 말고
+- 추천하고 싶고 다시 방문하고 싶다는 긍정적인 어조로만 작성해줘
+- "실망", "아쉬움", "별로", "그저 그래", "쏘쏘" 같은 부정적 표현 금지
+```
+
 ## 📈 향후 개선 계획
 
 ### 🏃 Phase 1: 기본 안정성 강화 (우선순위: 높음)
@@ -1616,12 +1737,13 @@ git commit -m "docs: Update CLAUDE.md - Add Redis caching implementation guide"
 
 ---
 
-> 🚀 **마지막 업데이트**: 2025-01-13  
+> 🚀 **마지막 업데이트**: 2025-01-16  
 > 📧 **문의**: 문서 내용에 대한 질문이나 개선 제안은 이슈로 등록해주세요.  
-> 📋 **최근 업데이트**: 
-> - ✅ **톤앤매너 선택 기능 완전 구현**: 젠틀모드/일상모드/발랄모드 3가지 스타일
-> - ✅ **ToneModeSelector 컴포넌트 개발**: 카드형 인터페이스로 직관적 선택
-> - ✅ **AI 프롬프트 시스템 고도화**: 톤별 맞춤형 지침으로 개성 있는 리뷰 생성
-> - ✅ **프로덕션 배포 완료**: Firebase Hosting + Functions 전체 배포
-> - 🔧 **향후 계획**: TypeScript 에러 해결, Redis 캐싱 구현  
-> 📋 **다음 업데이트 예정**: TypeScript 에러 해결 가이드, Redis 캐싱 구현 문서, 고급 리뷰 스타일 옵션
+> 📋 **최근 주요 업데이트 (2025-01-13 ~ 2025-01-16)**: 
+> - ✅ **Firestore 데이터 저장 시스템**: 요청별 포괄적 데이터 추적 (2025-01-13)
+> - ✅ **크롤링 안정성 개선**: 3회 재시도 메커니즘으로 간헐적 실패 해결 (2025-01-16)
+> - ✅ **긍정적 리뷰 생성 강제**: 부정적 리뷰 생성 완전 차단 시스템 (2025-01-16)
+> - ✅ **사용자 감상 검증 시스템**: 스팸 및 부적절 내용 필터링 강화
+> - ✅ **AI 모델 사용 추적**: OpenAI/Gemini/Groq 사용 현황 상세 분석
+> - 🔧 **향후 계획**: TypeScript 에러 해결, Rate Limiting 구현
+> 📋 **다음 업데이트 예정**: Redis 캐싱 시스템, 성능 모니터링 대시보드, 사용자 히스토리 기능

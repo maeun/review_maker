@@ -5,6 +5,7 @@ const https_1 = require("firebase-functions/v2/https");
 const cors = require("cors");
 const logger_1 = require("./utils/logger");
 const dateUtils_1 = require("./utils/dateUtils");
+const firestoreLogger_1 = require("./utils/firestoreLogger");
 const clog = (...args) => console.log("[crawlVisitorReviews]", ...args);
 const corsMiddleware = cors({
     origin: ["https://review-maker-nvr.web.app", "http://localhost:3000"],
@@ -225,62 +226,126 @@ exports.crawlVisitorReviews = (0, https_1.onRequest)({
                 await targetFrame.evaluate(() => window.scrollBy(0, 800));
                 await targetFrame.waitForTimeout(2000);
             }
-            // 다중 셀렉터 전략으로 리뷰 추출
-            const selectors = [
-                ".pui__vn15t2",
-                "[data-testid='review-item']",
-                ".review_item",
-                ".visitor-review",
-                ".review-content",
-                ".Lia3P",
-                ".YeINN"
-            ];
-            let reviews = [];
-            let usedSelector = "";
-            for (const selector of selectors) {
-                try {
-                    const elements = await targetFrame.$$(selector);
-                    if (elements.length > 0) {
-                        clog(`✅ 셀렉터 성공: ${selector} (${elements.length}개 요소)`);
-                        for (const element of elements) {
-                            try {
-                                const text = await element.evaluate((el) => { var _a; return (_a = el.textContent) === null || _a === void 0 ? void 0 : _a.trim(); });
-                                if (text && text.length > 10 && text.length < 500) {
-                                    reviews.push(text);
+            // 리뷰 추출 함수 (재시도 로직 포함)
+            const extractReviewsWithRetry = async (maxRetries = 3) => {
+                const selectors = [
+                    ".pui__vn15t2",
+                    "[data-testid='review-item']",
+                    ".review_item",
+                    ".visitor-review",
+                    ".review-content",
+                    ".Lia3P",
+                    ".YeINN"
+                ];
+                for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    clog(`🔍 리뷰 추출 시도 ${attempt}/${maxRetries}`);
+                    let reviews = [];
+                    let usedSelector = "";
+                    for (const selector of selectors) {
+                        try {
+                            const elements = await targetFrame.$$(selector);
+                            if (elements.length > 0) {
+                                clog(`✅ 셀렉터 성공: ${selector} (${elements.length}개 요소) - 시도 ${attempt}`);
+                                for (const element of elements) {
+                                    try {
+                                        const text = await element.evaluate((el) => { var _a; return (_a = el.textContent) === null || _a === void 0 ? void 0 : _a.trim(); });
+                                        if (text && text.length > 10 && text.length < 500) {
+                                            reviews.push(text);
+                                        }
+                                    }
+                                    catch (err) {
+                                        continue;
+                                    }
                                 }
-                            }
-                            catch (err) {
-                                continue;
+                                usedSelector = selector;
+                                break;
                             }
                         }
-                        usedSelector = selector;
-                        break;
+                        catch (err) {
+                            clog(`⚠️ 셀렉터 ${selector} 실패 (시도 ${attempt}):`, err.message);
+                            continue;
+                        }
+                    }
+                    if (reviews.length > 0) {
+                        clog(`✅ 리뷰 추출 성공: ${reviews.length}개 (시도 ${attempt})`);
+                        return { reviews, usedSelector };
+                    }
+                    if (attempt < maxRetries) {
+                        // 재시도 전 페이지 새로고침 및 대기
+                        const retryDelay = 3000 + (attempt * 2000); // 3초, 5초, 7초...
+                        clog(`🔄 리뷰 추출 실패. ${retryDelay}ms 후 재시도... (시도 ${attempt}/${maxRetries})`);
+                        try {
+                            // 페이지 새로고침
+                            await page.reload({ waitUntil: "networkidle0", timeout: 60000 });
+                            clog(`🔄 페이지 새로고침 완료 (시도 ${attempt})`);
+                            // iframe 다시 찾기
+                            const frames = page.frames();
+                            for (const frame of frames) {
+                                try {
+                                    const frameUrl = frame.url();
+                                    if (frameUrl && frameUrl.includes("place")) {
+                                        targetFrame = frame;
+                                        clog(`🖼️ iframe 재감지: ${frameUrl} (시도 ${attempt})`);
+                                        break;
+                                    }
+                                }
+                                catch (err) {
+                                    continue;
+                                }
+                            }
+                            // 안정화 대기
+                            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+                            // 리뷰 섹션으로 다시 스크롤
+                            try {
+                                await targetFrame.evaluate(() => {
+                                    const reviewSection = document.querySelector('.pui__vn15t2, [data-testid="review-item"], .review_item, .visitor-review, .review-content, .Lia3P, .YeINN');
+                                    if (reviewSection) {
+                                        reviewSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }
+                                });
+                                await new Promise((resolve) => setTimeout(resolve, 2000));
+                            }
+                            catch (scrollError) {
+                                clog(`⚠️ 리뷰 섹션 스크롤 실패 (시도 ${attempt}):`, scrollError);
+                            }
+                            // 추가 스크롤로 더 많은 리뷰 로드
+                            for (let i = 0; i < 3; i++) {
+                                await targetFrame.evaluate(() => window.scrollBy(0, 800));
+                                await targetFrame.waitForTimeout(2000);
+                            }
+                        }
+                        catch (reloadError) {
+                            clog(`❌ 페이지 새로고침 실패 (시도 ${attempt}):`, reloadError.message);
+                            // 새로고침 실패해도 계속 진행
+                            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+                        }
                     }
                 }
-                catch (err) {
-                    continue;
-                }
-            }
+                return { reviews: [], usedSelector: "" };
+            };
+            // 재시도 로직을 포함한 리뷰 추출 실행
+            const { reviews: rawReviews, usedSelector } = await extractReviewsWithRetry(3);
             // 중복 제거 및 정리
-            reviews = [...new Set(reviews)].filter(review => review.length >= 10 &&
+            const reviews = [...new Set(rawReviews)].filter(review => review.length >= 10 &&
                 review.length <= 500 &&
                 !review.includes('로그인') &&
                 !review.includes('회원가입'));
             clog(`📝 추출된 리뷰 수: ${reviews.length}`);
             clog(`🎯 사용된 셀렉터: ${usedSelector}`);
             if (reviews.length === 0) {
-                const errorMsg = "방문자 리뷰를 가져올 수 없습니다. 페이지 구조가 변경되었을 수 있습니다.";
+                const errorMsg = "방문자 리뷰를 가져올 수 없습니다. 3회 재시도 후에도 실패했습니다.";
                 if (requestId) {
                     await logger.updateRequestInfo(requestId, {
-                        crawlingUrl: `${targetUrl} (셀렉터: ${usedSelector})`,
+                        crawlingUrl: `${targetUrl} (셀렉터: ${usedSelector || '모든 셀렉터 실패'}, 3회 재시도 실패)`,
                         requestDate
                     });
                     await logger.logError(requestId, errorMsg, requestDate);
                 }
                 res.status(500).json({
                     error: errorMsg,
-                    detail: `사용된 셀렉터: ${usedSelector || '없음'}`,
-                    placeId
+                    detail: `사용된 셀렉터: ${usedSelector || '없음'} (3회 재시도 실패)`,
+                    placeId,
+                    retryAttempts: 3
                 });
                 return;
             }
@@ -302,6 +367,16 @@ exports.crawlVisitorReviews = (0, https_1.onRequest)({
                     crawlingUrl: `${targetUrl} (${usedSelector})`,
                     requestDate
                 });
+                // Firestore에 크롤링 정보 저장
+                const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                await firestoreLogger.updateCrawlingInfo(requestId, placeId, targetUrl);
+                // 방문자 리뷰 크롤링 데이터 저장
+                await firestoreLogger.updateVisitorReviewData(requestId, {
+                    referenceReviewCount: reviews.length,
+                    referenceReviews: (0, logger_1.truncateArray)(reviews, 30),
+                    crawlingSuccess: true,
+                    processingTimeSeconds: Math.round((Date.now() - startTime) / 1000)
+                });
             }
             const response = {
                 visitorReviews: reviews,
@@ -316,6 +391,13 @@ exports.crawlVisitorReviews = (0, https_1.onRequest)({
             clog("❌ 크롤링 중 오류 발생:", error.message);
             if (requestId) {
                 await logger.logError(requestId, `크롤링 실패: ${error.message}`, requestDate);
+                // Firestore에 에러 로깅
+                const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                await firestoreLogger.updateVisitorReviewData(requestId, {
+                    crawlingSuccess: false,
+                    errorMessage: `크롤링 실패: ${error.message}`
+                });
+                await firestoreLogger.logError(requestId, 'visitor', `크롤링 실패: ${error.message}`);
             }
             res.status(500).json({
                 error: "방문자 리뷰 크롤링 중 오류가 발생했습니다.",

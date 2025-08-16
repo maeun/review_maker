@@ -39,6 +39,7 @@ const cors = require("cors");
 const logger_1 = require("./utils/logger");
 const impressionValidator_1 = require("./utils/impressionValidator");
 const dateUtils_1 = require("./utils/dateUtils");
+const firestoreLogger_1 = require("./utils/firestoreLogger");
 const clog = (...args) => console.log("[generateBlogReviewText]", ...args);
 const getToneInstruction = (toneMode) => {
     switch (toneMode) {
@@ -52,7 +53,7 @@ const getToneInstruction = (toneMode) => {
             return "자연스럽고 친근한 말투로 작성해주세요.";
     }
 };
-const systemPrompt = "You are an expert Korean blog writer specializing in positive, authentic reviews. Write in natural, friendly style for blog readers. Never use '체험' or '경험'. Use CONSISTENT formal speech (존댓말) throughout - always use '~요', '~습니다', '~예요' endings. Use sophisticated but approachable vocabulary. Add emojis sparingly for emphasis. Focus on specific positive details and personal observations. Always maintain a positive, enthusiastic tone while being authentic. Avoid negative comments or complaints.";
+const systemPrompt = "You are an expert Korean blog writer specializing in EXCLUSIVELY POSITIVE reviews. Write in natural, friendly style for blog readers. Never use '체험' or '경험'. Use CONSISTENT formal speech (존댓말) throughout - always use '~요', '~습니다', '~예요' endings. Use sophisticated but approachable vocabulary. Add emojis sparingly for emphasis. Focus on specific positive details and personal observations. CRITICAL: NEVER include negative comments, complaints, disappointments, or any criticism. Only write about satisfying, pleasant, and recommendable experiences. Transform any negative aspects into positive ones or omit them entirely.";
 const digestPrompt = (reviews, userImpression, toneMode) => {
     const basePrompt = `Summarize these place reviews in Korean, focusing on positive aspects:\n\n${reviews.join("\n\n")}\n\n`;
     const userImpressionPart = userImpression
@@ -60,7 +61,14 @@ const digestPrompt = (reviews, userImpression, toneMode) => {
         : '';
     const toneInstruction = toneMode ? getToneInstruction(toneMode) : "";
     const toneSection = toneInstruction ? `\n\n**Tone & Style Guidelines**: ${toneInstruction}\n` : "";
-    return basePrompt + userImpressionPart + `Rules:
+    return basePrompt + userImpressionPart + `**CRITICAL POSITIVE TONE REQUIREMENTS**:
+  - ABSOLUTELY NO negative expressions, complaints, disappointments, or criticisms
+  - NEVER use words like: 실망, 아쉬움, 별로, 그저그래, 쏘쏘, 못미쳤다, 딱딱해서, 기대에못미쳤다, 불만, 불편
+  - ONLY write about satisfying, pleasant, and recommendable experiences
+  - Transform any negative aspects mentioned in reviews into positive aspects or omit them entirely
+  - Emphasize excellence, satisfaction, and recommendation value
+
+Rules:
   1. Only use positive content mentioned in reviews
   2. No generic info or other places
   3. Focus on positive features by place type:
@@ -71,10 +79,11 @@ const digestPrompt = (reviews, userImpression, toneMode) => {
      - Accommodation: comfortable rooms, excellent facilities, attentive service, great location, good value
      - Tourism: amazing attractions, well-maintained facilities, easy access, reasonable prices, high satisfaction
      - Other: unique positive features mentioned in reviews
-  4. Ignore negative comments, complaints, or criticisms
+  4. Ignore negative comments, complaints, or criticisms completely
   5. Emphasize what makes this place special and worth visiting
+  6. Use positive expressions like: 맛있었어요, 좋았어요, 만족스러웠어요, 추천해요, 훌륭해요, 완벽해요
   
-  IMPORTANT: Respond in Korean only with positive tone.${toneSection}`;
+  IMPORTANT: Respond in Korean only with exclusively positive tone.${toneSection}`;
 };
 const indexPrompt = (summary) => `Create 6 Korean blog section titles based on this summary. Rules:
 - Natural blog style ending with '요' or '습니다'
@@ -532,6 +541,18 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                     processingTime: Date.now() - startTime,
                     requestDate
                 });
+                // Firestore에 성공 데이터 저장
+                const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                await firestoreLogger.updateBlogReviewData(requestId, {
+                    referenceReviewCount: blogReviews.length,
+                    referenceReviews: (0, logger_1.truncateArray)(blogReviews, 10),
+                    generationPrompt: (0, logger_1.truncateString)(combinedPrompt, 2000),
+                    generatedReview: (0, logger_1.truncateString)(blogReviewText, 3000),
+                    aiModel: 'openai-gpt4o',
+                    generationSuccess: true,
+                    crawlingSuccess: true,
+                    processingTimeSeconds: Math.round((Date.now() - startTime) / 1000)
+                });
             }
             clog("✅ OpenAI 최종 블로그 리뷰 생성 완료");
         }
@@ -608,6 +629,18 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                             aiModel: 'groq-fallback',
                             processingTime: Date.now() - startTime,
                             requestDate
+                        });
+                        // Firestore에 성공 데이터 저장
+                        const firestoreLogger = firestoreLogger_1.FirestoreLogger.getInstance();
+                        await firestoreLogger.updateBlogReviewData(requestId, {
+                            referenceReviewCount: blogReviews.length,
+                            referenceReviews: (0, logger_1.truncateArray)(blogReviews, 10),
+                            generationPrompt: (0, logger_1.truncateString)(combinedPrompt, 2000),
+                            generatedReview: (0, logger_1.truncateString)(blogReviewText, 3000),
+                            aiModel: 'groq-fallback',
+                            generationSuccess: true,
+                            crawlingSuccess: true,
+                            processingTimeSeconds: Math.round((Date.now() - startTime) / 1000)
                         });
                     }
                     clog("✅ Groq 최종 블로그 리뷰 생성 완료");

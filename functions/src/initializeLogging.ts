@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import cors = require("cors");
 import { ReviewLogger } from "./utils/logger";
+import { FirestoreLogger } from "./utils/firestoreLogger";
 
 const clog = (...args: any[]) => console.log("[initializeLogging]", ...args);
 
@@ -21,7 +22,7 @@ export const initializeLogging = onRequest(
         return;
       }
 
-      const { requestId, requestUrl, requestType, userImpression } = req.body;
+      const { requestId, requestUrl, requestType, userImpression, toneMode } = req.body;
       const userEnvironment = req.headers['x-user-environment'] as 'mobile' | 'desktop' | 'unknown';
       const userAgent = req.headers['x-user-agent'] as string;
       
@@ -31,8 +32,10 @@ export const initializeLogging = onRequest(
       }
 
       const logger = ReviewLogger.getInstance();
+      const firestoreLogger = FirestoreLogger.getInstance();
 
       try {
+        // 기존 메모리 로깅
         await logger.startRequest(requestId, {
           userEnvironment: userEnvironment || 'unknown',
           userAgent,
@@ -41,7 +44,17 @@ export const initializeLogging = onRequest(
           userImpression: userImpression || ""
         });
 
-        clog(`✅ 로깅 초기화 완료: ${requestId}`);
+        // Firestore 로깅 추가
+        await firestoreLogger.initializeRequest(
+          requestId,
+          requestUrl,
+          userEnvironment || 'unknown',
+          userImpression || "",
+          requestType,
+          toneMode || 'casual'
+        );
+
+        clog(`✅ 로깅 초기화 완료 (메모리 + Firestore): ${requestId}`);
         res.status(200).json({ success: true, message: "로깅 초기화 완료" });
       } catch (error) {
         clog(`❌ 로깅 초기화 실패: ${requestId}`, error);
