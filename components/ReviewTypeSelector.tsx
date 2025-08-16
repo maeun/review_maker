@@ -6,9 +6,11 @@ import {
   Icon,
   useColorModeValue,
   Box,
-  Flex
+  Flex,
+  Divider
 } from "@chakra-ui/react";
 import { FaUser, FaBlog } from "react-icons/fa";
+import ToneModeSelector, { ToneMode } from "./ToneModeSelector";
 
 export interface ReviewTypeOptions {
   visitor: boolean;
@@ -18,12 +20,16 @@ export interface ReviewTypeOptions {
 interface ReviewTypeSelectorProps {
   value: ReviewTypeOptions;
   onChange: (value: ReviewTypeOptions) => void;
+  toneMode: ToneMode;
+  onToneModeChange: (value: ToneMode) => void;
   isDisabled?: boolean;
 }
 
 export default function ReviewTypeSelector({ 
   value, 
   onChange, 
+  toneMode,
+  onToneModeChange,
   isDisabled = false 
 }: ReviewTypeSelectorProps) {
   const borderColor = useColorModeValue("gray.200", "gray.600");
@@ -153,6 +159,15 @@ export default function ReviewTypeSelector({
           </VStack>
         </Box>
       </HStack>
+
+      {/* 톤앤매너 선택 섹션 추가 */}
+      <Divider my={4} />
+      
+      <ToneModeSelector 
+        value={toneMode}
+        onChange={onToneModeChange}
+        isDisabled={isDisabled}
+      />
     
     </VStack>
   );

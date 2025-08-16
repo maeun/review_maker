@@ -7,10 +7,23 @@ import { getCurrentDateString } from "./utils/dateUtils";
 const clog = (...args: any[]) =>
   console.log("[generateBlogReviewText]", ...args);
 
+const getToneInstruction = (toneMode: string) => {
+  switch (toneMode) {
+    case 'gentle':
+      return "정중하고 예의 바른 존댓말 톤으로 작성해주세요. 품격 있고 신뢰감 있는 표현을 사용하세요.";
+    case 'casual':
+      return "자연스럽고 친근한 말투로 작성해주세요. 혼잣말하듯 솔직하고 개인적인 느낌을 담아주세요.";
+    case 'energetic':
+      return "생동감 있고 재미있게 작성해주세요. 이모지를 적극 활용하고 감탄사나 의성어/의태어를 사용하세요.";
+    default:
+      return "자연스럽고 친근한 말투로 작성해주세요.";
+  }
+};
+
 const systemPrompt =
   "You are an expert Korean blog writer specializing in positive, authentic reviews. Write in natural, friendly style for blog readers. Never use '체험' or '경험'. Use CONSISTENT formal speech (존댓말) throughout - always use '~요', '~습니다', '~예요' endings. Use sophisticated but approachable vocabulary. Add emojis sparingly for emphasis. Focus on specific positive details and personal observations. Always maintain a positive, enthusiastic tone while being authentic. Avoid negative comments or complaints.";
 
-const digestPrompt = (reviews: string[], userImpression?: string) => {
+const digestPrompt = (reviews: string[], userImpression?: string, toneMode?: string) => {
   const basePrompt = `Summarize these place reviews in Korean, focusing on positive aspects:\n\n${reviews.join(
     "\n\n"
   )}\n\n`;
@@ -18,6 +31,9 @@ const digestPrompt = (reviews: string[], userImpression?: string) => {
   const userImpressionPart = userImpression 
     ? `Also consider this user's personal impression: "${userImpression}"\n\nIntegrate the user's impression naturally if it aligns with the reviews, but prioritize the actual reviews if there are significant discrepancies.\n\n`
     : '';
+    
+  const toneInstruction = toneMode ? getToneInstruction(toneMode) : "";
+  const toneSection = toneInstruction ? `\n\n**Tone & Style Guidelines**: ${toneInstruction}\n` : "";
     
   return basePrompt + userImpressionPart + `Rules:
   1. Only use positive content mentioned in reviews
@@ -33,7 +49,7 @@ const digestPrompt = (reviews: string[], userImpression?: string) => {
   4. Ignore negative comments, complaints, or criticisms
   5. Emphasize what makes this place special and worth visiting
   
-  IMPORTANT: Respond in Korean only with positive tone.`;
+  IMPORTANT: Respond in Korean only with positive tone.${toneSection}`;
 };
 
 const indexPrompt = (
@@ -141,7 +157,7 @@ const cleanGeneratedText = (text: string): string => {
 };
 
 // Groq fallback 함수 - 컨텍스트 연속성 강화
-const tryGroqModels = async (blogReviews: string[], userImpression?: string): Promise<string> => {
+const tryGroqModels = async (blogReviews: string[], userImpression?: string, toneMode?: string): Promise<string> => {
   const system = { role: "system", content: systemPrompt };
   const { default: fetch } = await import("node-fetch");
   const groqModels = [
@@ -412,7 +428,7 @@ export const generateBlogReviewText = onRequest(
         return;
       }
 
-      const { blogReviews, userImpression } = req.body;
+      const { blogReviews, userImpression, toneMode } = req.body;
       if (
         !blogReviews ||
         !Array.isArray(blogReviews) ||
@@ -497,7 +513,7 @@ export const generateBlogReviewText = onRequest(
             model: "gpt-4o",
             messages: [
               ...openaiHistory,
-              { role: "user", content: digestPrompt(blogReviews, validatedUserImpression) },
+              { role: "user", content: digestPrompt(blogReviews, validatedUserImpression, toneMode) },
             ],
             temperature: 0.7,
             max_tokens: 1000,
@@ -607,7 +623,7 @@ export const generateBlogReviewText = onRequest(
         
         // OpenAI 성공 로깅
         if (requestId) {
-          const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression)}\n\nIndex: ${indexPrompt(reviewSummary)}\n\nSection: ${sectionPrompt('[섹션]', reviewSummary)}\n\nTitle: ${titlePrompt(blogBody)}`;
+          const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression, toneMode)}\n\nIndex: ${indexPrompt(reviewSummary)}\n\nSection: ${sectionPrompt('[섹션]', reviewSummary)}\n\nTitle: ${titlePrompt(blogBody)}`;
           await logger.updateBlogReview(requestId, {
             reviewCount: blogReviews.length,
             reviews: truncateArray(blogReviews, 10),
@@ -635,7 +651,7 @@ export const generateBlogReviewText = onRequest(
           const reviewSummary = await retryWithDelay(() =>
             model
               .generateContent(
-                `${systemPrompt}\n\n${digestPrompt(blogReviews, validatedUserImpression)}`
+                `${systemPrompt}\n\n${digestPrompt(blogReviews, validatedUserImpression, toneMode)}`
               )
               .then((result) => result.response.text().trim())
           );
@@ -714,11 +730,11 @@ export const generateBlogReviewText = onRequest(
           clog("3차: Groq API 시도");
 
           try {
-            blogReviewText = await tryGroqModels(blogReviews, validatedUserImpression);
+            blogReviewText = await tryGroqModels(blogReviews, validatedUserImpression, toneMode);
             
             // Groq 성공 로깅
             if (requestId) {
-              const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression)}\n\nGroq Fallback Chain`;
+              const combinedPrompt = `System: ${systemPrompt}\n\nDigest: ${digestPrompt(blogReviews, validatedUserImpression, toneMode)}\n\nGroq Fallback Chain`;
               await logger.updateBlogReview(requestId, {
                 reviewCount: blogReviews.length,
                 reviews: truncateArray(blogReviews, 10),

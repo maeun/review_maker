@@ -22,6 +22,7 @@ import { FaRobot, FaStar, FaMapMarkerAlt, FaLightbulb } from "react-icons/fa";
 import ReviewResult from "../components/ReviewResult";
 import SmartUrlInput from "../components/SmartUrlInput";
 import ReviewTypeSelector, { ReviewTypeOptions } from "../components/ReviewTypeSelector";
+import { ToneMode } from "../components/ToneModeSelector";
 import AdBanner from "../components/AdBanner";
 
 export default function Home() {
@@ -31,6 +32,7 @@ export default function Home() {
     visitor: true,
     blog: true
   });
+  const [toneMode, setToneMode] = useState<ToneMode>('casual'); // 기본값: 일상모드
   const [userImpression, setUserImpression] = useState("");
 
   const [visitorReview, setVisitorReview] = useState("");
@@ -180,7 +182,8 @@ export default function Home() {
             },
             body: JSON.stringify({
               visitorReviews: visitorCrawlData.visitorReviews,
-              userImpression: userImpression
+              userImpression: userImpression,
+              toneMode: toneMode
             }),
           });
           if (!res.ok) throw new Error("방문자 리뷰 작성 실패");
@@ -236,7 +239,8 @@ export default function Home() {
             },
             body: JSON.stringify({ 
               blogReviews: crawlData.blogReviews,
-              userImpression: userImpression
+              userImpression: userImpression,
+              toneMode: toneMode
             }),
           });
           if (!genRes.ok) throw new Error("블로그 리뷰 작성 실패");
@@ -417,6 +421,8 @@ export default function Home() {
               <ReviewTypeSelector
                 value={reviewTypes}
                 onChange={setReviewTypes}
+                toneMode={toneMode}
+                onToneModeChange={setToneMode}
                 isDisabled={isVisitorLoading || isBlogLoading}
               />
               

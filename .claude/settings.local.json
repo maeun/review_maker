@@ -25,7 +25,10 @@
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
       "Bash(git pull:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(curl:*)",
+      "Bash(nslookup:*)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   }

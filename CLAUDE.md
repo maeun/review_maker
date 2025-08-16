@@ -7,6 +7,7 @@
 ### 🎯 핵심 기능
 - **스마트 URL 입력**: 실시간 검증, 클립보드 지원, 단축 URL 자동 해석
 - **선택적 리뷰 생성**: 방문자 리뷰와 블로그 리뷰 개별 선택 가능
+- **톤앤매너 선택**: 젠틀모드/일상모드/발랄모드 3가지 어투 지원 (✅ 2025-01-13 구현 완료)
 - **사용자 감상 반영**: 개인 경험을 리뷰 생성에 통합
 - **다중 AI Fallback**: OpenAI GPT-4 → Gemini → Groq 순차 시도
 - **실시간 진행 추적**: 단계별 애니메이션, 진행률, 예상 완료 시간
@@ -31,6 +32,7 @@ review_maker/
 │   ├── SmartUrlInput.tsx     # 고급 URL 입력 컴포넌트
 │   ├── ReviewResult.tsx      # 리뷰 결과 표시
 │   ├── ReviewTypeSelector.tsx # 리뷰 타입 선택
+│   ├── ToneModeSelector.tsx  # 톤앤매너 선택
 │   ├── LoadingAnimation.tsx  # 진행 상황 애니메이션
 │   ├── SkeletonLoader.tsx    # 로딩 스켈레톤
 │   └── AdBanner.tsx          # 광고 배너
@@ -228,6 +230,31 @@ export interface ReviewTypeOptions {
 }
 ```
 
+#### `components/ToneModeSelector.tsx` - 톤앤매너 선택
+**핵심 역할**: 리뷰 작성 스타일 선택 기능 제공
+```typescript
+export type ToneMode = 'gentle' | 'casual' | 'energetic';
+
+export interface ToneModeOption {
+  id: ToneMode;
+  label: string;
+  icon: any;
+  description: string;
+  example: string;
+}
+```
+
+**제공 옵션:**
+- **젠틀모드** 👑: 존댓말로 정중하게 - "음식이 정말 맛있었습니다"
+- **일상모드** 👤: 혼잣말처럼 자연스럽게 - "생각보다 훨씬 맛있었다"
+- **발랄모드** ⭐: 이모지로 생동감 있게 - "여기 진짜 대박이에요! 😍"
+
+**주요 기능:**
+- 라디오 버튼 방식 단일 선택
+- 시각적 예시와 설명 제공
+- 리뷰 생성 시 AI 프롬프트에 톤앤매너 지침 적용
+- 반응형 카드 레이아웃
+
 #### `components/AdBanner.tsx` - 광고 시스템
 **SEO 및 수익화 통합 컴포넌트**
 
@@ -281,15 +308,31 @@ const selectors = [
 
 **프롬프트 최적화:**
 - 사용자 개인 감상 통합
+- 톤앤매너 맞춤형 어투 적용
 - 8-12문장 구조화된 리뷰
 - 이모지 자연스러운 활용
 - 인사말/대화형 표현 제거 로직
+
+**톤앤매너 지침 시스템:**
+```typescript
+const getToneInstruction = (toneMode: string) => {
+  switch (toneMode) {
+    case 'gentle':
+      return "존댓말을 사용하여 정중하고 예의 바른 말투로 작성해주세요.";
+    case 'casual':
+      return "혼잣말하듯 자연스럽고 솔직한 말투로 작성해주세요.";
+    case 'energetic':
+      return "이모지를 풍부하게 사용하여 생동감 있고 재미있게 작성해주세요.";
+  }
+};
+```
 
 #### `generateBlogReviewText.ts` - 블로그 리뷰 AI 생성
 **핵심 역할**: 상세한 블로그 형태 리뷰 생성
 - 800자 이상 장문 리뷰
 - 마크다운 형식 지원
 - 구조화된 컨텍스트 관리
+- 톤앤매너 기반 블로그 스타일 적용
 
 #### `initializeLogging.ts` + `completeRequest.ts` - 로깅 시스템
 **핵심 역할**: 통합 요청 추적 및 분석
@@ -1573,7 +1616,12 @@ git commit -m "docs: Update CLAUDE.md - Add Redis caching implementation guide"
 
 ---
 
-> 🚀 **마지막 업데이트**: 2025-08-16  
+> 🚀 **마지막 업데이트**: 2025-01-13  
 > 📧 **문의**: 문서 내용에 대한 질문이나 개선 제안은 이슈로 등록해주세요.  
-> 📋 **최근 업데이트**: Google AdSense 문제 해결, 페이지 누락 이슈 해결, SEO 최적화 가이드 추가  
-> 📋 **다음 업데이트 예정**: TypeScript 에러 해결 가이드, Redis 캐싱 구현 문서, 광고 수익 최적화 전략
+> 📋 **최근 업데이트**: 
+> - ✅ **톤앤매너 선택 기능 완전 구현**: 젠틀모드/일상모드/발랄모드 3가지 스타일
+> - ✅ **ToneModeSelector 컴포넌트 개발**: 카드형 인터페이스로 직관적 선택
+> - ✅ **AI 프롬프트 시스템 고도화**: 톤별 맞춤형 지침으로 개성 있는 리뷰 생성
+> - ✅ **프로덕션 배포 완료**: Firebase Hosting + Functions 전체 배포
+> - 🔧 **향후 계획**: TypeScript 에러 해결, Redis 캐싱 구현  
+> 📋 **다음 업데이트 예정**: TypeScript 에러 해결 가이드, Redis 캐싱 구현 문서, 고급 리뷰 스타일 옵션

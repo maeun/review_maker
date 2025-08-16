@@ -7,14 +7,31 @@ import { getCurrentDateString } from "./utils/dateUtils";
 const clog = (...args: any[]) =>
   console.log("[generateVisitorReviewText]", ...args);
 
-const visitorPrompt = (reviews: string[], userImpression?: string) => {
+const getToneInstruction = (toneMode: string) => {
+  switch (toneMode) {
+    case 'gentle':
+      return "존댓말을 사용하여 정중하고 예의 바른 말투로 작성해주세요. 품격 있고 신뢰감 있는 표현을 사용하세요.";
+    case 'casual':
+      return "혼잣말하듯 자연스럽고 솔직한 말투로 작성해주세요. 반말을 사용하되 진솔한 개인적 경험을 담아주세요.";
+    case 'energetic':
+      return "이모지를 풍부하게 사용하여 생동감 있고 재미있게 작성해주세요. 감탄사와 의성어/의태어를 적극 활용하세요.";
+    default:
+      return "자연스럽고 솔직한 말투로 작성해주세요.";
+  }
+};
+
+const visitorPrompt = (reviews: string[], userImpression?: string, toneMode?: string) => {
   const basePrompt = `다음은 네이버 지도 방문자 리뷰들이다:\n${reviews.join(
     "\n"
   )}\n`;
   
+  const toneInstruction = toneMode ? getToneInstruction(toneMode) : "";
+  
   const userImpressionPart = userImpression 
     ? `\n그리고 사용자가 직접 작성한 감상은 다음과 같다:\n"${userImpression}"\n\n위 리뷰들과 사용자 감상을 종합적으로 참고하여 한글로 6~8문장 정도의 간결하고 자연스러운 방문자 후기를 작성해줘. 사용자의 감상이 기존 리뷰와 일치한다면 적극 반영하되, 너무 동떨어진 내용이라면 기존 리뷰를 우선시해줘. 다음 요소들을 포함해서 작성해줘:`
     : `\n이 리뷰들을 바탕으로 한글로 6~8문장 정도의 간결하고 자연스러운 방문자 후기를 작성해줘. 다음 요소들을 포함해서 작성해줘:`;
+    
+  const toneSection = toneInstruction ? `\n\n**톤앤매너 지침**: ${toneInstruction}\n` : "";
     
   return basePrompt + userImpressionPart + `
 1. 방문 동기나 계기
@@ -32,15 +49,15 @@ const visitorPrompt = (reviews: string[], userImpression?: string) => {
 - "네,", "안녕하세요", "오늘은", "여러분" 등의 인사말로 시작하지 말고 바로 본문으로 시작해줘
 - "소개합니다", "말씀드릴게요", "이야기해볼게요" 같은 대화형 표현 사용 금지
 - 구체적인 방문 경험부터 바로 시작해줘
-- 6~8문장으로 간결하게 핵심만 담아서 작성해줘`;
+- 6~8문장으로 간결하게 핵심만 담아서 작성해줘${toneSection}`;
 };
 
 const corsMiddleware = cors({
   origin: ["https://review-maker-nvr.web.app", "http://localhost:3000"],
 });
 
-const tryGroqVisitorFallback = async (reviews: string[], userImpression?: string) => {
-  const prompt = visitorPrompt(reviews, userImpression);
+const tryGroqVisitorFallback = async (reviews: string[], userImpression?: string, toneMode?: string) => {
+  const prompt = visitorPrompt(reviews, userImpression, toneMode);
   const { default: fetch } = await import("node-fetch");
 
   const groqModels = [
@@ -177,7 +194,7 @@ export const generateVisitorReviewText = onRequest(
         return;
       }
 
-      const { visitorReviews, userImpression } = req.body;
+      const { visitorReviews, userImpression, toneMode } = req.body;
       if (
         !visitorReviews ||
         !Array.isArray(visitorReviews) ||
@@ -220,7 +237,7 @@ export const generateVisitorReviewText = onRequest(
         }
       }
 
-      const prompt = visitorPrompt(visitorReviews, validatedUserImpression);
+      const prompt = visitorPrompt(visitorReviews, validatedUserImpression, toneMode);
       let visitorReviewText = "";
 
       try {
@@ -326,7 +343,7 @@ export const generateVisitorReviewText = onRequest(
           clog("3차: Groq API 시도");
 
           try {
-            visitorReviewText = await tryGroqVisitorFallback(visitorReviews, validatedUserImpression);
+            visitorReviewText = await tryGroqVisitorFallback(visitorReviews, validatedUserImpression, toneMode);
             
             // Groq 성공 로깅
             if (requestId) {
