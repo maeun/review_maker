@@ -370,7 +370,7 @@ const tryGroqModels = async (blogReviews: string[], userImpression?: string, ton
           )
         );
         const cleanedSection = cleanGeneratedText(section);
-        sections.push(`**${title}**\n\n${cleanedSection}`);
+        sections.push(`**${title}**\n${cleanedSection}`);
         // 각 섹션 후 히스토리 정리
         conversationHistory.length = 1;
       }
@@ -587,7 +587,7 @@ export const generateBlogReviewText = onRequest(
             const content =
               sectionRes.choices?.[0]?.message?.content?.trim() || "";
             const cleanedContent = cleanGeneratedText(content);
-            return `**${title}**\n\n${cleanedContent}`;
+            return `**${title}**\n${cleanedContent}`;
           })
         );
         const blogBody = sections.join("\n\n");
@@ -710,7 +710,7 @@ export const generateBlogReviewText = onRequest(
                   .then((result) => result.response.text().trim())
               );
               const cleanedContent = cleanGeneratedText(content);
-              return `**${title}**\n\n${cleanedContent}`;
+              return `**${title}**\n${cleanedContent}`;
             })
           );
           const blogBody = sections.join("\n\n");
