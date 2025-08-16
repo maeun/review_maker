@@ -20,9 +20,12 @@
 review_maker/
 ├── pages/                    # Next.js 페이지 (Frontend)
 │   ├── index.tsx             # 메인 서비스 페이지
+│   ├── about.tsx             # 서비스 소개 페이지
 │   ├── contact.tsx           # 문의 페이지
 │   ├── privacy.tsx           # 프라이버시 정책
 │   ├── terms.tsx             # 이용약관
+│   ├── 404.tsx               # 404 에러 페이지
+│   ├── 500.tsx               # 500 에러 페이지
 │   └── api/                  # 개발 전용 API Routes
 ├── components/               # React 컴포넌트
 │   ├── SmartUrlInput.tsx     # 고급 URL 입력 컴포넌트
@@ -145,6 +148,7 @@ http://localhost:3000/
 
 **주요 페이지들:**
 - `/` - 메인 리뷰 생성 서비스
+- `/about` - 서비스 소개 페이지
 - `/contact` - 문의하기 페이지
 - `/privacy` - 프라이버시 정책
 - `/terms` - 이용약관
@@ -552,6 +556,49 @@ npx tsc --noEmit
 ignoreBuildErrors: false
 ```
 
+#### 6. 페이지 누락 문제 (Static Export)
+**증상:**
+- 사이트맵에 있는 페이지가 실제로 접근 불가능
+- Google AdSense "사이트가 다운되었거나 사용할 수 없음" 에러
+- 빌드된 out 디렉토리에 특정 페이지 폴더가 누락
+
+**원인 분석:**
+- Next.js Static Export 과정에서 일부 페이지 생성 실패
+- 이전 빌드 캐시 문제
+- 잘못된 빌드 설정
+
+**해결 방법:**
+```bash
+# 1. 완전한 클린 빌드
+rm -rf out .next
+npm run build
+
+# 2. 빌드 결과 확인
+ls -la out/  # 모든 페이지 디렉토리 존재 확인
+
+# 3. 페이지별 접근성 테스트
+curl -I https://review-maker-nvr.web.app/about/
+curl -I https://review-maker-nvr.web.app/contact/
+curl -I https://review-maker-nvr.web.app/privacy/
+curl -I https://review-maker-nvr.web.app/terms/
+
+# 4. Firebase 재배포
+firebase deploy --only hosting
+
+# 5. Googlebot 접근성 확인
+curl -A "Googlebot/2.1" -I https://review-maker-nvr.web.app/
+curl -A "Mediapartners-Google" -I https://review-maker-nvr.web.app/
+```
+
+**예방 조치:**
+```bash
+# 배포 전 필수 체크리스트
+- [ ] 모든 페이지가 out 디렉토리에 생성되었는지 확인
+- [ ] sitemap.xml의 모든 URL이 실제로 접근 가능한지 테스트
+- [ ] robots.txt가 올바르게 설정되었는지 확인
+- [ ] 404/500 에러 페이지가 정상 작동하는지 확인
+```
+
 ## 🚀 배포 가이드
 
 ### 🔄 배포 프로세스
@@ -635,12 +682,16 @@ jobs:
 - [ ] **테스트 통과**: `npm test` 성공
 - [ ] **빌드 성공**: `npm run build` 오류 없음
 - [ ] **Functions 컴파일**: `cd functions && npm run build` 성공
+- [ ] **페이지 생성 확인**: out 디렉토리에 모든 페이지 존재 확인
+- [ ] **사이트맵 검증**: sitemap.xml의 모든 URL 접근 가능
+- [ ] **Googlebot 접근성**: 크롤러가 모든 페이지에 정상 접근 가능
 
 #### 선택 확인 사항
 - [ ] **성능 테스트**: Lighthouse 점수 확인
 - [ ] **모바일 최적화**: 반응형 디자인 검증
 - [ ] **SEO 설정**: robots.txt, sitemap.xml 업데이트
 - [ ] **에러 모니터링**: Firebase Crashlytics 설정
+- [ ] **AdSense 준비**: 콘텐츠 정책 준수, 트래픽 요구사항 충족
 
 ## 📊 성능 최적화 가이드
 
@@ -770,6 +821,198 @@ const mobileArgs = [
   priority={true}           // LCP 최적화
   placeholder="blur"        // 로딩 개선
 />
+```
+
+## 🔍 SEO 및 수익화 최적화
+
+### 📈 Google AdSense 통합 가이드
+
+#### AdSense 심사 준비사항
+
+**필수 요구사항:**
+- [ ] **충분한 콘텐츠**: 최소 10-15개 페이지, 고품질 콘텐츠
+- [ ] **프라이버시 정책**: 완전하고 정확한 정책 페이지
+- [ ] **이용약관**: 명확한 서비스 이용 조건
+- [ ] **연락처 정보**: 실제 연락 가능한 정보 제공
+- [ ] **사이트 안정성**: 모든 페이지 정상 접근 가능
+- [ ] **모바일 친화적**: 반응형 디자인 적용
+
+**기술적 요구사항:**
+```bash
+# 1. 모든 페이지 접근성 확인
+for page in "" "about" "contact" "privacy" "terms"; do
+  echo "Testing: /$page"
+  curl -I "https://review-maker-nvr.web.app/$page/" | head -1
+done
+
+# 2. Googlebot 접근성 테스트
+curl -A "Googlebot/2.1" -I https://review-maker-nvr.web.app/
+curl -A "Mediapartners-Google" -I https://review-maker-nvr.web.app/
+
+# 3. 사이트맵 검증
+curl -s https://review-maker-nvr.web.app/sitemap.xml | grep -o '<loc>.*</loc>'
+
+# 4. robots.txt 확인
+curl https://review-maker-nvr.web.app/robots.txt
+```
+
+#### 일반적인 AdSense 거부 사유 및 해결방법
+
+**1. "사이트가 다운되었거나 사용할 수 없음"**
+```bash
+# 문제 진단
+- 사이트맵에 있는 URL이 실제로 접근 불가능
+- 일부 페이지가 Static Export에서 누락
+- 404/500 에러 발생
+
+# 해결 방법
+rm -rf out .next
+npm run build
+# out 디렉토리에 모든 페이지 폴더 존재 확인
+firebase deploy --only hosting
+```
+
+**2. "콘텐츠 부족"**
+- 서비스 소개 페이지 개선
+- 도움말/FAQ 페이지 추가
+- 사용 가이드 상세화
+
+**3. "프라이버시 정책 불완전"**
+- 쿠키 사용 정책 명시
+- 데이터 처리 방법 상세 설명
+- 광고 관련 정책 추가
+
+#### AdSense 통합 구현
+
+**1. AdSense 코드 삽입**
+```typescript
+// components/AdBanner.tsx 개선
+import { useEffect } from 'react';
+
+interface AdBannerProps {
+  adSlot: string;
+  adFormat?: 'auto' | 'rectangle' | 'horizontal';
+}
+
+export default function AdBanner({ adSlot, adFormat = 'auto' }: AdBannerProps) {
+  useEffect(() => {
+    try {
+      // @ts-ignore
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (err) {
+      console.error('AdSense error:', err);
+    }
+  }, []);
+
+  return (
+    <ins
+      className="adsbygoogle"
+      style={{ display: 'block' }}
+      data-ad-client="ca-pub-YOUR_PUBLISHER_ID"
+      data-ad-slot={adSlot}
+      data-ad-format={adFormat}
+      data-full-width-responsive="true"
+    />
+  );
+}
+```
+
+**2. Head에 AdSense 스크립트 추가**
+```typescript
+// pages/_app.tsx
+import Head from 'next/head';
+
+function MyApp({ Component, pageProps }: AppProps) {
+  return (
+    <>
+      <Head>
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_PUBLISHER_ID"
+          crossOrigin="anonymous"
+        />
+      </Head>
+      <Component {...pageProps} />
+    </>
+  );
+}
+```
+
+### 🔍 SEO 최적화 전략
+
+#### 메타 태그 최적화
+```typescript
+// 각 페이지별 SEO 최적화
+export default function Page() {
+  return (
+    <>
+      <Head>
+        <title>네이버 리뷰 생성기 - AI 자동 리뷰 작성 도구</title>
+        <meta name="description" content="네이버 지도 리뷰를 AI로 자동 생성하는 무료 도구. 방문자 후기와 블로그 리뷰를 스마트하게 작성해보세요." />
+        <meta name="keywords" content="네이버 리뷰, AI 리뷰 생성, 자동 리뷰 작성, 네이버 지도" />
+        <meta property="og:title" content="네이버 리뷰 생성기" />
+        <meta property="og:description" content="AI로 자동 생성하는 네이버 지도 리뷰 도구" />
+        <meta property="og:image" content="https://review-maker-nvr.web.app/review_maker_og_img.png" />
+        <meta property="og:url" content="https://review-maker-nvr.web.app/" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <link rel="canonical" href="https://review-maker-nvr.web.app/" />
+      </Head>
+      {/* 페이지 콘텐츠 */}
+    </>
+  );
+}
+```
+
+#### 구조화된 데이터 (JSON-LD)
+```typescript
+// components/StructuredData.tsx
+export default function StructuredData() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "네이버 리뷰 생성기",
+    "description": "AI를 활용한 네이버 지도 리뷰 자동 생성 도구",
+    "url": "https://review-maker-nvr.web.app",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web Browser",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "KRW"
+    }
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+    />
+  );
+}
+```
+
+#### 사이트맵 자동 생성
+```typescript
+// scripts/generate-sitemap.js
+const fs = require('fs');
+const path = require('path');
+
+const BASE_URL = 'https://review-maker-nvr.web.app';
+const pages = ['', 'about', 'contact', 'privacy', 'terms'];
+
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${pages.map(page => `
+  <url>
+    <loc>${BASE_URL}/${page}</loc>
+    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
+    <changefreq>${page === '' ? 'daily' : 'weekly'}</changefreq>
+    <priority>${page === '' ? '1.0' : '0.8'}</priority>
+  </url>`).join('')}
+</urlset>`;
+
+fs.writeFileSync(path.join(__dirname, '../public/sitemap.xml'), sitemap);
+console.log('✅ Sitemap generated successfully');
 ```
 
 ## 🛡️ 보안 고려사항
@@ -1164,6 +1407,42 @@ npx tsc --noEmit
 npm run build && firebase deploy --only functions
 ```
 
+#### 5. Google AdSense 심사 실패 (페이지 접근 불가)
+**감지 방법:**
+- AdSense에서 "사이트가 다운되었거나 사용할 수 없음" 메시지
+- 사이트맵의 일부 URL이 404 에러 반환
+- Googlebot이 특정 페이지에 접근 실패
+
+**대응 절차:**
+```bash
+# 1. 전체 사이트 접근성 확인
+curl -I https://review-maker-nvr.web.app/
+curl -I https://review-maker-nvr.web.app/about/
+curl -I https://review-maker-nvr.web.app/contact/
+curl -I https://review-maker-nvr.web.app/privacy/
+curl -I https://review-maker-nvr.web.app/terms/
+
+# 2. Googlebot 접근성 테스트
+curl -A "Googlebot/2.1" -I https://review-maker-nvr.web.app/
+curl -A "Mediapartners-Google" -I https://review-maker-nvr.web.app/
+
+# 3. 빌드 및 배포 문제 해결
+rm -rf out .next
+npm run build
+firebase deploy --only hosting
+
+# 4. 사이트맵 검증
+curl https://review-maker-nvr.web.app/sitemap.xml
+
+# 5. robots.txt 확인
+curl https://review-maker-nvr.web.app/robots.txt
+```
+
+**근본 원인 해결:**
+- Next.js Static Export 설정 점검
+- 모든 페이지 컴포넌트의 정적 생성 가능성 확인
+- Firebase Hosting 설정 검토
+
 ### 📞 에스컬레이션 연락망
 
 #### 기술적 이슈
@@ -1294,6 +1573,7 @@ git commit -m "docs: Update CLAUDE.md - Add Redis caching implementation guide"
 
 ---
 
-> 🚀 **마지막 업데이트**: 2025-01-13  
+> 🚀 **마지막 업데이트**: 2025-08-16  
 > 📧 **문의**: 문서 내용에 대한 질문이나 개선 제안은 이슈로 등록해주세요.  
-> 📋 **다음 업데이트 예정**: TypeScript 에러 해결 가이드, Redis 캐싱 구현 문서
+> 📋 **최근 업데이트**: Google AdSense 문제 해결, 페이지 누락 이슈 해결, SEO 최적화 가이드 추가  
+> 📋 **다음 업데이트 예정**: TypeScript 에러 해결 가이드, Redis 캐싱 구현 문서, 광고 수익 최적화 전략
