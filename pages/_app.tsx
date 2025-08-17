@@ -2,6 +2,14 @@ import type { AppProps } from "next/app";
 import Head from "next/head";
 import { Provider } from "../components/ui/provider";
 
+// Web Vitals 성능 측정
+export function reportWebVitals(metric: any) {
+  if (process.env.NODE_ENV === "production") {
+    // 성능 메트릭을 콘솔에 로그 (실제 서비스에서는 분석 도구로 전송)
+    console.log(metric);
+  }
+}
+
 export default function MyApp({ Component, pageProps }: AppProps) {
   return (
     <>
@@ -56,7 +64,10 @@ export default function MyApp({ Component, pageProps }: AppProps) {
 
         {/* Twitter Card Meta Tags */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Review Maker - 네이버 리뷰 생성기" />
+        <meta
+          name="twitter:title"
+          content="Review Maker - 네이버 리뷰 생성기"
+        />
         <meta
           name="twitter:description"
           content="손쉽게/빠르게/완벽한 리뷰 제작"
@@ -67,10 +78,40 @@ export default function MyApp({ Component, pageProps }: AppProps) {
         <meta name="theme-color" content="#ffffff" />
         <meta name="robots" content="index, follow" />
         <link rel="canonical" href="https://review-maker-nvr.web.app" />
-        
-        {/* Google AdSense */}
-        <script 
-          async 
+
+        {/* Critical CSS for faster rendering */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              /* Critical CSS for above-the-fold content */
+              body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+              .chakra-ui-light { --chakra-colors-chakra-body-bg: #ffffff; }
+              .css-1kmeo00 { min-height: 100vh; background-image: linear-gradient(to bottom right, #ebf8ff, #e6fffa, #faf5ff); }
+              .css-1osqnx8 { width: 100%; max-width: 72rem; margin: 0 auto; padding: 1rem; }
+              @media (min-width: 48em) { .css-1osqnx8 { padding: 2rem 1.5rem; } }
+            `,
+          }}
+        />
+
+        {/* DNS Prefetch for external resources */}
+        <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" />
+        <link
+          rel="dns-prefetch"
+          href="//us-central1-review-maker-nvr.cloudfunctions.net"
+        />
+        <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+        <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+
+        {/* Preconnect for critical resources */}
+        <link rel="preconnect" href="https://pagead2.googlesyndication.com" />
+        <link
+          rel="preconnect"
+          href="https://us-central1-review-maker-nvr.cloudfunctions.net"
+        />
+
+        {/* Google AdSense with optimized loading */}
+        <script
+          async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3472536634074099"
           crossOrigin="anonymous"
         />
@@ -82,42 +123,63 @@ export default function MyApp({ Component, pageProps }: AppProps) {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "Review Maker",
-              "description": "네이버 리뷰 생성기 - 손쉽게/빠르게/완벽한 리뷰 제작",
-              "url": "https://review-maker-nvr.web.app",
-              "applicationCategory": "ProductivityApplication",
-              "operatingSystem": "Web Browser",
-              "offers": {
+              name: "Review Maker",
+              description:
+                "네이버 리뷰 생성기 - 손쉽게/빠르게/완벽한 리뷰 제작",
+              url: "https://review-maker-nvr.web.app",
+              applicationCategory: "ProductivityApplication",
+              operatingSystem: "Web Browser",
+              offers: {
                 "@type": "Offer",
-                "price": "0",
-                "priceCurrency": "KRW"
+                price: "0",
+                priceCurrency: "KRW",
               },
-              "aggregateRating": {
+              aggregateRating: {
                 "@type": "AggregateRating",
-                "ratingValue": "4.8",
-                "ratingCount": "1200"
+                ratingValue: "4.8",
+                ratingCount: "1200",
               },
-              "publisher": {
+              publisher: {
                 "@type": "Organization",
-                "name": "Review Maker",
-                "url": "https://review-maker-nvr.web.app"
+                name: "Review Maker",
+                url: "https://review-maker-nvr.web.app",
               },
-              "inLanguage": "ko-KR",
-              "mainEntity": {
+              inLanguage: "ko-KR",
+              mainEntity: {
                 "@type": "Service",
-                "name": "네이버 리뷰 생성 서비스",
-                "description": "방문자 리뷰와 블로그 리뷰를 자동으로 생성하는 무료 웹 서비스",
-                "provider": {
+                name: "네이버 리뷰 생성 서비스",
+                description:
+                  "방문자 리뷰와 블로그 리뷰를 자동으로 생성하는 무료 웹 서비스",
+                provider: {
                   "@type": "Organization",
-                  "name": "Review Maker"
+                  name: "Review Maker",
                 },
-                "areaServed": "KR",
-                "audience": {
+                areaServed: "KR",
+                audience: {
                   "@type": "Audience",
-                  "audienceType": "일반 사용자, 블로거, 사업자"
-                }
+                  audienceType: "일반 사용자, 블로거, 사업자",
+                },
+              },
+            }),
+          }}
+        />
+
+        {/* Service Worker Registration */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator && typeof window !== 'undefined') {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(function(registration) {
+                      console.log('SW registered: ', registration);
+                    })
+                    .catch(function(registrationError) {
+                      console.log('SW registration failed: ', registrationError);
+                    });
+                });
               }
-            })
+            `,
           }}
         />
       </Head>

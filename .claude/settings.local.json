@@ -30,6 +30,9 @@
       "Bash(nslookup:*)",
       "Bash(timeout:*)"
     ],
-    "deny": []
+    "deny": [],
+    "additionalDirectories": [
+      "C:\\Users\\maeun\\side_pjt"
+    ]
   }
 }

@@ -329,7 +329,7 @@ const tryGroqModels = async (blogReviews, userImpression, toneMode) => {
             for (const title of blogIndexes) {
                 const section = await retryApiCall(() => callGroqWithContext(`Write "${title}" section based on summary and TOC:\n${sectionPrompt(title, summary)}`, `요약: ${summary.slice(0, 300)}\n목차: ${blogIndexes.join(", ")}`));
                 const cleanedSection = cleanGeneratedText(section);
-                sections.push(`**${title}**\n\n${cleanedSection}`);
+                sections.push(`**${title}**\n${cleanedSection}`);
                 // 각 섹션 후 히스토리 정리
                 conversationHistory.length = 1;
             }
@@ -498,7 +498,7 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                 }));
                 const content = ((_d = (_c = (_b = (_a = sectionRes.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) === null || _d === void 0 ? void 0 : _d.trim()) || "";
                 const cleanedContent = cleanGeneratedText(content);
-                return `**${title}**\n\n${cleanedContent}`;
+                return `**${title}**\n${cleanedContent}`;
             }));
             const blogBody = sections.join("\n\n");
             clog(`📄 OpenAI 섹션 생성 완료: ${sections.length}개`);
@@ -587,7 +587,7 @@ exports.generateBlogReviewText = (0, https_1.onRequest)({
                         .generateContent(sectionPromptWithContext)
                         .then((result) => result.response.text().trim()));
                     const cleanedContent = cleanGeneratedText(content);
-                    return `**${title}**\n\n${cleanedContent}`;
+                    return `**${title}**\n${cleanedContent}`;
                 }));
                 const blogBody = sections.join("\n\n");
                 clog(`📄 Gemini 섹션 생성 완료: ${sections.length}개`);

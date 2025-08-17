@@ -6,6 +6,7 @@
     "dev": "cross-env NODE_ENV=development next dev",
     "dev:prod": "cross-env NODE_ENV=production next dev",
     "build": "cross-env NODE_ENV=production next build --no-lint",
+    "build:analyze": "cross-env ANALYZE=true npm run build",
     "start": "next start",
     "export": "next export",
     "test": "playwright test",
@@ -35,12 +36,14 @@
     "scheduler": "^0.23.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^15.4.6",
     "@playwright/test": "^1.53.2",
     "@types/cors": "^2.8.19",
     "@types/node": "20.11.30",
     "@types/react": "^18.2.55",
     "@types/react-dom": "18.2.19",
     "cross-env": "^10.0.0",
-    "typescript": "5.4.5"
+    "typescript": "5.4.5",
+    "webpack-bundle-analyzer": "^4.10.2"
   }
 }
